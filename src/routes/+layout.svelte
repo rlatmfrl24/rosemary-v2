@@ -1,7 +1,12 @@
 <script lang="ts">
-	import '../app.css';
+import "../app.css";
 
-	let { children } = $props();
+const { children } = $props();
+
+// set the title of the page
+$effect(() => {
+	document.title = "Rosemary";
+});
 </script>
 
 {@render children()}
