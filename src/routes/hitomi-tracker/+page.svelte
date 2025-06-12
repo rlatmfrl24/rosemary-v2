@@ -1,3 +1,101 @@
-<div class="flex flex-col justify-center items-center h-full">
-	<h1 class="text-4xl font-bold">Hitomi Tracker</h1>
+<script lang="ts">
+import { type ColumnDef, getCoreRowModel } from "@tanstack/table-core";
+import type { PageData } from "./$types";
+import { createSvelteTable, FlexRender } from "@/lib/components/ui/data-table";
+import * as Table from "$lib/components/ui/table";
+import type { new_item_list } from "@/lib/server/db/schema";
+import Button from "@/lib/components/ui/button/button.svelte";
+
+export let data: PageData;
+
+type HitomiItem = typeof new_item_list.$inferSelect;
+
+const columns: ColumnDef<HitomiItem>[] = [
+	{
+		header: "Code",
+		accessorKey: "code",
+		size: 40,
+	},
+	{
+		header: "Name",
+		accessorKey: "name",
+		size: 320,
+	},
+	{
+		header: "Type",
+		accessorKey: "type",
+		size: 40,
+	},
+	{
+		header: "URL",
+		accessorKey: "url",
+		size: 120,
+	},
+	{
+		header: "Created At",
+		accessorKey: "createdAt",
+		size: 100,
+	},
+];
+
+const table = createSvelteTable({
+	get data() {
+		return data.new_item_list;
+	},
+	columns: columns,
+	getCoreRowModel: getCoreRowModel(),
+});
+</script>
+
+<div class="flex flex-col h-full p-4 gap-4">
+	<div class="flex flex-row gap-4">
+		<h1 class="text-4xl font-bold">Hitomi Tracker</h1>
+		<Button onclick={() => {
+			// copy codes with break line
+			const codes = data.new_item_list.map((item) => item.code).join("\n");
+			navigator.clipboard.writeText(codes);
+		}}>
+			Copy to clipboard
+		</Button>
+	</div>
+	<div class="flex flex-col gap-4 border rounded-md p-4 w-full h-0 flex-auto">
+		<Table.Root style="width: 100%; table-layout: fixed;">
+			<Table.Header>
+				{#each table.getHeaderGroups() as headerGroup (headerGroup.id)}
+				<Table.Row>
+				  {#each headerGroup.headers as header (header.id)}
+					<Table.Head style="width: {header.column.getSize()}px">
+					  {#if !header.isPlaceholder}
+						<FlexRender
+						  content={header.column.columnDef.header}
+						  context={header.getContext()}
+						/>
+					  {/if}
+					</Table.Head>
+				  {/each}
+				</Table.Row>
+			  {/each}
+			</Table.Header>
+			<Table.Body>
+				{#each table.getRowModel().rows as row (row.id)}
+				<Table.Row data-state={row.getIsSelected() && "selected"}>
+				  {#each row.getVisibleCells() as cell (cell.id)}
+					<Table.Cell class="truncate">
+					  <FlexRender
+						content={cell.column.columnDef.cell}
+						context={cell.getContext()}
+					  />
+					</Table.Cell>
+				  {/each}
+				</Table.Row>
+			  {:else}
+				<Table.Row>
+				  <Table.Cell colspan={columns.length} class="h-24 text-center">
+					No results.
+				  </Table.Cell>
+				</Table.Row>
+			  {/each}
+			</Table.Body>
+		</Table.Root>
+	</div>
 </div>

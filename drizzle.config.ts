@@ -6,8 +6,8 @@ export default defineConfig({
 	dialect: "sqlite", // D1은 SQLite 호환
 	driver: "d1-http", // 사용할 드라이버 지정
 	dbCredentials: {
-		accountId: process.env.CLOUDFLARE_ACCOUNT_ID!,
-		databaseId: process.env.CLOUDFLARE_DATABASE_ID!,
-		token: process.env.CLOUDFLARE_TOKEN!,
+		accountId: process.env.CLOUDFLARE_ACCOUNT_ID ?? "",
+		databaseId: process.env.CLOUDFLARE_DATABASE_ID ?? "",
+		token: process.env.CLOUDFLARE_TOKEN ?? "",
 	},
 });
