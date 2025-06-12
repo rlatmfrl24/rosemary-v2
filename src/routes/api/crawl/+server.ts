@@ -10,16 +10,20 @@ export async function GET(context) {
 		.select()
 		.from(hitomi_history)
 		.limit(200);
-	console.log(history);
 
 	// it will crawl from e-hentai and return the json
 	const itemList: { code: string; name: string; type: string; url: string }[] =
 		[];
 
+	let pageCursor = "";
+
 	for (let page = 0; page < 5; page++) {
-		const eh_response = await fetch(
-			`https://e-hentai.org/?f_search=korean&f_srdd=3&range=${page + 1}`,
-		);
+		const eh_response =
+			page === 0
+				? await fetch("https://e-hentai.org/?f_search=korean&f_srdd=3")
+				: await fetch(
+						`https://e-hentai.org/?f_search=korean&f_srdd=3&next=${pageCursor}`,
+					);
 		const $ = cheerio.load(await eh_response.text());
 		$("table tbody tr").each((index, element) => {
 			if (index > 1) {
@@ -43,6 +47,13 @@ export async function GET(context) {
 				}
 			}
 		});
+		// get next page cursor that is code of last item in itemList
+		const lastItemCode = itemList[itemList.length - 1]?.code;
+		if (lastItemCode) {
+			pageCursor = lastItemCode;
+		} else {
+			break;
+		}
 	}
 
 	// insert itemList to db

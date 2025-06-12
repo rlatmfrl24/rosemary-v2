@@ -1,10 +1,15 @@
 <script lang="ts">
 import { type ColumnDef, getCoreRowModel } from "@tanstack/table-core";
 import type { PageData } from "./$types";
-import { createSvelteTable, FlexRender } from "@/lib/components/ui/data-table";
+import {
+	createSvelteTable,
+	FlexRender,
+	renderSnippet,
+} from "@/lib/components/ui/data-table";
 import * as Table from "$lib/components/ui/table";
 import type { new_item_list } from "@/lib/server/db/schema";
 import Button from "@/lib/components/ui/button/button.svelte";
+import { createRawSnippet } from "svelte";
 
 export let data: PageData;
 
@@ -14,23 +19,27 @@ const columns: ColumnDef<HitomiItem>[] = [
 	{
 		header: "Code",
 		accessorKey: "code",
+		size: 40,
 	},
 	{
 		header: "Name",
 		accessorKey: "name",
-		size: 100,
+		size: 320,
 	},
 	{
 		header: "Type",
 		accessorKey: "type",
+		size: 40,
 	},
 	{
 		header: "URL",
 		accessorKey: "url",
+		size: 120,
 	},
 	{
 		header: "Created At",
 		accessorKey: "createdAt",
+		size: 100,
 	},
 ];
 
@@ -54,13 +63,13 @@ const table = createSvelteTable({
 			Copy to clipboard
 		</Button>
 	</div>
-	<div class="flex flex-col gap-4 border rounded-md p-4 w-full">
-		<Table.Root>
+	<div class="flex flex-col gap-4 border rounded-md p-4 w-full h-0 flex-auto">
+		<Table.Root style="width: 100%; table-layout: fixed;">
 			<Table.Header>
 				{#each table.getHeaderGroups() as headerGroup (headerGroup.id)}
 				<Table.Row>
 				  {#each headerGroup.headers as header (header.id)}
-					<Table.Head>
+					<Table.Head style="width: {header.column.getSize()}px">
 					  {#if !header.isPlaceholder}
 						<FlexRender
 						  content={header.column.columnDef.header}
