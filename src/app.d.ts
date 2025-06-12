@@ -2,12 +2,19 @@
 // for information about these interfaces
 declare global {
 	namespace App {
-        interface Platform {
-            env: Env
-            cf: CfProperties
-            ctx: ExecutionContext
-        }
-    }
+		interface Locals {
+			db: import("drizzle-orm/d1").DrizzleD1Database<
+				typeof import("$lib/server/db/schema")
+			>;
+		}
+		interface Platform {
+			env: Env & {
+				DB: D1Database;
+			};
+			cf: CfProperties;
+			ctx: ExecutionContext;
+		}
+	}
 }
 
 export {};

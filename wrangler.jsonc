@@ -28,9 +28,10 @@
 	 */
 	"d1_databases": [
 		{
-			"binding": "ROSEMARY_DB",
+			"binding": "DB",
 			"database_name": "rosemary-db",
-			"database_id": "f8cc0bd0-2dba-4f72-8b8f-10224c9c90ae"
+			"database_id": "f8cc0bd0-2dba-4f72-8b8f-10224c9c90ae",
+			"migrations_dir": "migrations"
 		}
 	]
 
