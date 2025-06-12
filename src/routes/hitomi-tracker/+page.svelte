@@ -1,15 +1,10 @@
 <script lang="ts">
 import { type ColumnDef, getCoreRowModel } from "@tanstack/table-core";
 import type { PageData } from "./$types";
-import {
-	createSvelteTable,
-	FlexRender,
-	renderSnippet,
-} from "@/lib/components/ui/data-table";
+import { createSvelteTable, FlexRender } from "@/lib/components/ui/data-table";
 import * as Table from "$lib/components/ui/table";
 import type { new_item_list } from "@/lib/server/db/schema";
 import Button from "@/lib/components/ui/button/button.svelte";
-import { createRawSnippet } from "svelte";
 
 export let data: PageData;
 
