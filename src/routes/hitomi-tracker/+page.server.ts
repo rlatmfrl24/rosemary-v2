@@ -4,7 +4,6 @@ import type { PageServerLoad } from "../$types";
 export const load: PageServerLoad = async ({ locals }) => {
 	try {
 		const newItems = await locals.db.select().from(new_item_list).all();
-		console.log(newItems);
 		return {
 			new_item_list: newItems,
 		};

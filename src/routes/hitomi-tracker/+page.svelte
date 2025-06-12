@@ -4,6 +4,7 @@ import type { PageData } from "./$types";
 import { createSvelteTable, FlexRender } from "@/lib/components/ui/data-table";
 import * as Table from "$lib/components/ui/table";
 import type { new_item_list } from "@/lib/server/db/schema";
+import Button from "@/lib/components/ui/button/button.svelte";
 
 export let data: PageData;
 
@@ -43,7 +44,16 @@ const table = createSvelteTable({
 </script>
 
 <div class="flex flex-col h-full p-4 gap-4">
-	<h1 class="text-4xl font-bold">Hitomi Tracker</h1>
+	<div class="flex flex-row gap-4">
+		<h1 class="text-4xl font-bold">Hitomi Tracker</h1>
+		<Button onclick={() => {
+			// copy codes with break line
+			const codes = data.new_item_list.map((item) => item.code).join("\n");
+			navigator.clipboard.writeText(codes);
+		}}>
+			Copy to clipboard
+		</Button>
+	</div>
 	<div class="flex flex-col gap-4 border rounded-md p-4 w-full">
 		<Table.Root>
 			<Table.Header>
