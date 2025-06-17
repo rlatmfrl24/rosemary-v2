@@ -5,8 +5,16 @@ import { createSvelteTable, FlexRender } from "@/lib/components/ui/data-table";
 import * as Table from "$lib/components/ui/table";
 import type { new_item_list } from "@/lib/server/db/schema";
 import Button from "@/lib/components/ui/button/button.svelte";
+import { enhance } from "$app/forms";
 
 export let data: PageData;
+
+// biome-ignore lint/style/useConst: <explanation>
+let isClearNewItemsLoading = false;
+// biome-ignore lint/style/useConst: <explanation>
+let isClearHistoryLoading = false;
+// biome-ignore lint/style/useConst: <explanation>
+let isCallCrawlApiLoading = false;
 
 type HitomiItem = typeof new_item_list.$inferSelect;
 
@@ -57,6 +65,39 @@ const table = createSvelteTable({
 		}}>
 			Copy to clipboard
 		</Button>
+		<form method="post" action="?/clearNewItems" use:enhance={()=>{
+			isClearNewItemsLoading = true;
+			return async ({update}) => {
+				await update();
+				isClearNewItemsLoading = false;
+			}
+		}}>
+			<Button type="submit" name="action" value="clearNewItems" disabled={isClearNewItemsLoading}>
+				Clear new items
+			</Button>
+		</form>
+		<form method="post" action="?/clearHistory" use:enhance={()=>{
+			isClearHistoryLoading = true;
+			return async ({update}) => {
+				await update();
+				isClearHistoryLoading = false;
+			}
+		}}>
+			<Button type="submit" name="action" value="clearHistory" disabled={isClearHistoryLoading}>
+				Clear history
+			</Button>
+		</form>
+		<form method="post" action="?/callCrawlApi" use:enhance={()=>{
+			isCallCrawlApiLoading = true;
+			return async ({update}) => {
+				await update();
+				isCallCrawlApiLoading = false;
+			}
+		}}>
+			<Button type="submit" name="action" value="callCrawlApi" disabled={isCallCrawlApiLoading}>
+				Call crawl API
+			</Button>
+		</form>
 	</div>
 	<div class="flex flex-col gap-4 border rounded-md p-4 w-full h-0 flex-auto">
 		<Table.Root style="width: 100%; table-layout: fixed;">
