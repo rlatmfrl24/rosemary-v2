@@ -57,6 +57,21 @@ const table = createSvelteTable({
 		}}>
 			Copy to clipboard
 		</Button>
+		<form method="post" action="?/clearNewItems">
+			<Button type="submit" name="action" value="clearNewItems">
+				Clear new items
+			</Button>
+		</form>
+		<form method="post" action="?/clearHistory">
+			<Button type="submit" name="action" value="clearHistory">
+				Clear history
+			</Button>
+		</form>
+		<form method="post" action="?/callCrawlApi">
+			<Button type="submit" name="action" value="callCrawlApi">
+				Call crawl API
+			</Button>
+		</form>
 	</div>
 	<div class="flex flex-col gap-4 border rounded-md p-4 w-full h-0 flex-auto">
 		<Table.Root style="width: 100%; table-layout: fixed;">
