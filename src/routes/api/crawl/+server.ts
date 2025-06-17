@@ -4,12 +4,17 @@ import { hitomi_history, new_item_list } from "$lib/server/db/schema";
 import { json } from "@sveltejs/kit";
 import * as cheerio from "cheerio";
 import { drizzle } from "drizzle-orm/d1";
+import { desc } from "drizzle-orm";
 
 export async function GET(context) {
 	const db = drizzle(context.platform?.env.DB as D1Database);
 
 	// get hitomi history from db
-	const history = await db.select().from(hitomi_history).limit(200);
+	const history = await db
+		.select()
+		.from(hitomi_history)
+		.orderBy(desc(hitomi_history.createdAt))
+		.limit(500);
 
 	// it will crawl from e-hentai and return the json
 	const itemList: { code: string; name: string; type: string; url: string }[] =
