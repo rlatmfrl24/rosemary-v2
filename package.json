@@ -59,7 +59,11 @@
 		]
 	},
 	"dependencies": {
+		"@types/node-fetch": "^2.6.12",
 		"cheerio": "^1.1.0",
-		"drizzle-orm": "^0.44.2"
+		"drizzle-orm": "^0.44.2",
+		"https-proxy-agent": "^7.0.6",
+		"node-fetch": "^3.3.2",
+		"undici": "^7.10.0"
 	}
 }

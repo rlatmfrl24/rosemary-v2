@@ -6,6 +6,40 @@ import * as cheerio from "cheerio";
 import { drizzle } from "drizzle-orm/d1";
 import { desc } from "drizzle-orm";
 
+// 일반 HTTP 요청 함수
+async function fetchWithRetry(url: string, maxRetries = 3): Promise<Response> {
+	let lastError: unknown;
+
+	for (let i = 0; i < maxRetries; i++) {
+		try {
+			console.log(`요청 시도 ${i + 1}/${maxRetries}...`);
+			const response = await fetch(url, {
+				headers: {
+					"User-Agent":
+						"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+				},
+			});
+
+			if (response.ok) {
+				console.log("요청 성공");
+				return response;
+			}
+
+			throw new Error(`HTTP 에러: ${response.status}`);
+		} catch (error) {
+			console.error("요청 실패:", error);
+			lastError = error;
+
+			// 마지막 시도가 아니면 잠시 대기 후 재시도
+			if (i < maxRetries - 1) {
+				await new Promise((resolve) => setTimeout(resolve, 1000 * (i + 1)));
+			}
+		}
+	}
+
+	throw lastError;
+}
+
 export async function GET(context) {
 	try {
 		console.log("크롤링 시작...");
@@ -40,16 +74,12 @@ export async function GET(context) {
 			console.log(`\n페이지 ${page + 1} 크롤링 중...`);
 			let eh_response: Response;
 			try {
-				eh_response =
+				const url =
 					page === 0
-						? await fetch("https://e-hentai.org/?f_search=korean&f_srdd=3")
-						: await fetch(
-								`https://e-hentai.org/?f_search=korean&f_srdd=3&next=${pageCursor}`,
-							);
+						? "https://e-hentai.org/?f_search=korean&f_srdd=3"
+						: `https://e-hentai.org/?f_search=korean&f_srdd=3&next=${pageCursor}`;
 
-				if (!eh_response.ok) {
-					throw new Error(`HTTP 에러: ${eh_response.status}`);
-				}
+				eh_response = await fetchWithRetry(url, 3);
 			} catch (error: unknown) {
 				console.error(`페이지 ${page + 1} 크롤링 중 에러 발생:`, error);
 				continue; // 다음 페이지로 계속 진행
@@ -58,6 +88,7 @@ export async function GET(context) {
 			let $: cheerio.CheerioAPI;
 			try {
 				const html = await eh_response.text();
+				console.debug(html);
 				$ = cheerio.load(html);
 			} catch (error: unknown) {
 				console.error(`페이지 ${page + 1} HTML 파싱 중 에러 발생:`, error);
