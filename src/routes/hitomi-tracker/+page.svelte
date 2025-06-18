@@ -10,11 +10,7 @@ import { enhance } from "$app/forms";
 export let data: PageData;
 
 // biome-ignore lint/style/useConst: <explanation>
-let isClearNewItemsLoading = false;
-// biome-ignore lint/style/useConst: <explanation>
-let isClearHistoryLoading = false;
-// biome-ignore lint/style/useConst: <explanation>
-let isCallCrawlApiLoading = false;
+let isLoading = false;
 
 type HitomiItem = typeof new_item_list.$inferSelect;
 
@@ -66,35 +62,35 @@ const table = createSvelteTable({
 			Copy to clipboard
 		</Button>
 		<form method="post" action="?/clearNewItems" use:enhance={()=>{
-			isClearNewItemsLoading = true;
+			isLoading = true;
 			return async ({update}) => {
 				await update();
-				isClearNewItemsLoading = false;
+				isLoading = false;
 			}
 		}}>
-			<Button type="submit" name="action" value="clearNewItems" disabled={isClearNewItemsLoading}>
+			<Button type="submit" name="action" value="clearNewItems" disabled={isLoading}>
 				Clear new items
 			</Button>
 		</form>
 		<form method="post" action="?/clearHistory" use:enhance={()=>{
-			isClearHistoryLoading = true;
+			isLoading = true;
 			return async ({update}) => {
 				await update();
-				isClearHistoryLoading = false;
+				isLoading = false;
 			}
 		}}>
-			<Button type="submit" name="action" value="clearHistory" disabled={isClearHistoryLoading}>
+			<Button type="submit" name="action" value="clearHistory" disabled={isLoading}>
 				Clear history
 			</Button>
 		</form>
 		<form method="post" action="?/callCrawlApi" use:enhance={()=>{
-			isCallCrawlApiLoading = true;
+			isLoading = true;
 			return async ({update}) => {
 				await update();
-				isCallCrawlApiLoading = false;
+				isLoading = false;
 			}
 		}}>
-			<Button type="submit" name="action" value="callCrawlApi" disabled={isCallCrawlApiLoading}>
+			<Button type="submit" name="action" value="callCrawlApi" disabled={isLoading}>
 				Call crawl API
 			</Button>
 		</form>
