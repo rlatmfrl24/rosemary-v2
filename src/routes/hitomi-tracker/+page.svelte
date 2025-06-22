@@ -6,15 +6,12 @@ import * as Table from "$lib/components/ui/table";
 import type { new_item_list } from "@/lib/server/db/schema";
 import Button from "@/lib/components/ui/button/button.svelte";
 import { enhance } from "$app/forms";
+import { toast } from "svelte-sonner";
 
 export let data: PageData;
 
 // biome-ignore lint/style/useConst: <explanation>
-let isClearNewItemsLoading = false;
-// biome-ignore lint/style/useConst: <explanation>
-let isClearHistoryLoading = false;
-// biome-ignore lint/style/useConst: <explanation>
-let isCallCrawlApiLoading = false;
+let isLoading = false;
 
 type HitomiItem = typeof new_item_list.$inferSelect;
 
@@ -56,50 +53,61 @@ const table = createSvelteTable({
 </script>
 
 <div class="flex flex-col h-full p-4 gap-4">
-	<div class="flex flex-row gap-4">
+	<div class="flex flex-row gap-4 items-center">
 		<h1 class="text-4xl font-bold">Hitomi Tracker</h1>
-		<Button onclick={() => {
-			// copy codes with break line
-			const codes = data.new_item_list.map((item) => item.code).join("\n");
-			navigator.clipboard.writeText(codes);
-		}}>
-			Copy to clipboard
-		</Button>
-		<form method="post" action="?/clearNewItems" use:enhance={()=>{
-			isClearNewItemsLoading = true;
-			return async ({update}) => {
-				await update();
-				isClearNewItemsLoading = false;
-			}
-		}}>
-			<Button type="submit" name="action" value="clearNewItems" disabled={isClearNewItemsLoading}>
-				Clear new items
+		<div class="flex flex-row gap-2">
+			<Button onclick={() => {
+				// copy codes with break line
+				const codes = data.new_item_list.map((item) => item.code).join("\n");
+				navigator.clipboard.writeText(codes);
+				toast.success("Codes copied to clipboard", {
+					description: "You can paste them into the search bar of Hitomi",
+				});
+			}}>
+				Copy codes to clipboard
 			</Button>
-		</form>
-		<form method="post" action="?/clearHistory" use:enhance={()=>{
-			isClearHistoryLoading = true;
-			return async ({update}) => {
-				await update();
-				isClearHistoryLoading = false;
-			}
-		}}>
-			<Button type="submit" name="action" value="clearHistory" disabled={isClearHistoryLoading}>
-				Clear history
-			</Button>
-		</form>
-		<form method="post" action="?/callCrawlApi" use:enhance={()=>{
-			isCallCrawlApiLoading = true;
-			return async ({update}) => {
-				await update();
-				isCallCrawlApiLoading = false;
-			}
-		}}>
-			<Button type="submit" name="action" value="callCrawlApi" disabled={isCallCrawlApiLoading}>
-				Call crawl API
-			</Button>
-		</form>
+			<form method="post" action="?/clearNewItems" use:enhance={()=>{
+				isLoading = true;
+				return async ({update}) => {
+					await update();
+					isLoading = false;
+				}
+			}}>
+				<Button type="submit" name="action" value="clearNewItems" disabled={isLoading}>
+					Clear new items
+				</Button>
+			</form>
+			<form method="post" action="?/clearHistory" use:enhance={()=>{
+				isLoading = true;
+				return async ({update}) => {
+					await update();
+					isLoading = false;
+				}
+			}}>
+				<Button type="submit" name="action" value="clearHistory" disabled={isLoading}>
+					Clear history
+				</Button>
+			</form>
+			<form method="post" action="?/callCrawlApi" use:enhance={()=>{
+				isLoading = true;
+				return async ({update}) => {
+					await update();
+					isLoading = false;
+				}
+			}}>
+				<Button type="submit" name="action" value="callCrawlApi" disabled={isLoading}>
+					Call crawl API
+				</Button>
+			</form>
+		</div>
 	</div>
 	<div class="flex flex-col gap-4 border rounded-md p-4 w-full h-0 flex-auto">
+		{#if isLoading}
+			<div class="flex flex-row gap-4 justify-center items-center h-full">
+				<p>Loading...</p>
+			</div>
+		{:else}
+
 		<Table.Root style="width: 100%; table-layout: fixed;">
 			<Table.Header>
 				{#each table.getHeaderGroups() as headerGroup (headerGroup.id)}
@@ -119,7 +127,9 @@ const table = createSvelteTable({
 			</Table.Header>
 			<Table.Body>
 				{#each table.getRowModel().rows as row (row.id)}
-				<Table.Row data-state={row.getIsSelected() && "selected"}>
+				<Table.Row data-state={row.getIsSelected() && "selected"} class="cursor-pointer" onclick={()=>{
+					window.open(row.original.url, "_blank");
+				}}>
 				  {#each row.getVisibleCells() as cell (cell.id)}
 					<Table.Cell class="truncate">
 					  <FlexRender
@@ -138,5 +148,6 @@ const table = createSvelteTable({
 			  {/each}
 			</Table.Body>
 		</Table.Root>
+		{/if}
 	</div>
 </div>

@@ -1,6 +1,7 @@
 <script lang="ts">
 import "../app.css";
 import Button from "$lib/components/ui/button/button.svelte";
+import { Toaster } from "$lib/components/ui/sonner/index.js";
 
 const { children } = $props();
 
@@ -9,6 +10,8 @@ $effect(() => {
 	document.title = "Rosemary";
 });
 </script>
+
+<Toaster position="bottom-center" richColors />
 
 <div class="flex flex-col justify-center items-center h-screen">
 	<header class="w-full p-4 bg-slate-900 text-white flex items-center">

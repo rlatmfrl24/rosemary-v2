@@ -88,7 +88,7 @@ export async function GET(context) {
 			let $: cheerio.CheerioAPI;
 			try {
 				const html = await eh_response.text();
-				console.debug(html);
+				// console.debug(html);
 				$ = cheerio.load(html);
 			} catch (error: unknown) {
 				console.error(`페이지 ${page + 1} HTML 파싱 중 에러 발생:`, error);
