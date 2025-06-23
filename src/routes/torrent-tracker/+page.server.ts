@@ -24,7 +24,6 @@ export const actions: Actions = {
 				and(eq(torrent_tracker_history.date, date), eq(torrent_tracker_history.country, country))
 			);
 		const isUpdated = result.length > 0;
-		console.log('Is already updated:', isUpdated);
 		return { isUpdated };
 	},
 	update: async (event) => {
