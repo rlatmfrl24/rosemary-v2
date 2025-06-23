@@ -13,17 +13,20 @@
 	import { Calendar } from '@/lib/components/ui/calendar';
 	import CalendarIcon from '@lucide/svelte/icons/calendar';
 	import * as Select from '@/lib/components/ui/select';
+	import { enhance } from '$app/forms';
 
 	const df = new DateFormatter('en-US', {
 		dateStyle: 'long'
 	});
 
-	let tableData: { line: string; searchUrl: string }[] = $state([]);
+	let tableData: { rank: number; line: string; searchUrl: string }[] = $state([]);
 	// default trendDate is today - 2 days
 	let trendDate = $state<DateValue>(
 		new CalendarDate(new Date().getFullYear(), new Date().getMonth() + 1, new Date().getDate() - 2)
 	);
 	let raw = $state('');
+	let isLoading = $state(false);
+	let isDateCountryUpdated = $state(false);
 	const countries = ['KR', 'US', 'JP', 'CN'];
 	let selectedCountry = $state('KR');
 	const btDigURL = 'https://btdig.com/search?q=';
@@ -31,16 +34,23 @@
 
 	const parseTrendRaw = () => {
 		const lines = raw.split('\n');
+		const data: { rank: number; line: string; searchUrl: string }[] = [];
 
-		const data: { line: string; searchUrl: string }[] = [];
-
-		for (const line of lines) {
+		for (const [index, line] of lines.entries()) {
 			if (line.trim() === '') continue;
-			data.push({ line, searchUrl: btDigURL + encodeURIComponent(line) });
+			data.push({ rank: index + 1, line, searchUrl: btDigURL + encodeURIComponent(line) });
 		}
 		tableData = data;
 		raw = '';
 	};
+
+	// Reset isDateCountryUpdated when date or country changes
+	$effect(() => {
+		// This effect runs when trendDate or selectedCountry changes
+		trendDate;
+		selectedCountry;
+		isDateCountryUpdated = false;
+	});
 </script>
 
 <div class="flex flex-col h-full p-4 gap-4">
@@ -53,12 +63,26 @@
 					selectedCountry = country;
 					raw = '';
 					tableData = [];
+					isDateCountryUpdated = false;
 					window.open(iKnowWhatYouDownloadURL + country + '/daily', '_blank');
 				}}
 			>
 				{country} Daily
 			</Button>
 		{/each}
+		<form
+			method="post"
+			action="?/clearDB"
+			use:enhance={() => {
+				isLoading = true;
+				return async ({ update }) => {
+					await update();
+					isLoading = false;
+				};
+			}}
+		>
+			<Button type="submit" disabled={isLoading}>Clear All DB</Button>
+		</form>
 	</div>
 
 	{#if tableData.length === 0}
@@ -96,16 +120,36 @@
 			</Popover.Root>
 		</div>
 		<Textarea placeholder="Enter your text here" bind:value={raw} />
-		<Button
-			onclick={() => {
+		<form
+			method="post"
+			action="?/checkAlreadyUpdated"
+			use:enhance={({ formData }) => {
 				parseTrendRaw();
+				formData.append('date', trendDate.toString());
+				formData.append('country', selectedCountry);
+				return async ({ result }) => {
+					if (
+						result.type === 'success' &&
+						result.data &&
+						typeof result.data === 'object' &&
+						'isUpdated' in result.data
+					) {
+						isDateCountryUpdated = (result.data as { isUpdated: boolean }).isUpdated;
+					}
+				};
 			}}
 		>
-			Parse
-		</Button>
+			<Button type="submit">Check</Button>
+		</form>
 	{:else if tableData.length > 0}
 		<div class="flex items-center justify-between gap-2">
 			<h2 class="text-2xl font-bold">{trendDate} {selectedCountry} Trend</h2>
+			{#if isDateCountryUpdated}
+				<p>Already updated</p>
+			{:else}
+				<p>Not updated</p>
+			{/if}
+
 			<Button
 				onclick={() => {
 					raw = '';
@@ -126,9 +170,9 @@
 					</Table.Row>
 				</Table.Header>
 				<Table.Body>
-					{#each tableData as row, index}
+					{#each tableData as row}
 						<Table.Row>
-							<Table.Cell>{index + 1}</Table.Cell>
+							<Table.Cell>{row.rank}</Table.Cell>
 							<Table.Cell>{row.line}</Table.Cell>
 							<Table.Cell>
 								<Button
@@ -153,6 +197,31 @@
 				</Table.Body>
 			</Table.Root>
 		</div>
-		<Button>Update</Button>
+
+		<div class="flex gap-2">
+			<form
+				method="post"
+				action="?/update"
+				use:enhance={({ formData }) => {
+					isLoading = true;
+					const historyData = tableData.map((item) => ({
+						name: item.line,
+						country: selectedCountry,
+						date: trendDate.toString(),
+						rank: item.rank
+					}));
+					formData.append('data', JSON.stringify(historyData));
+					return async ({ update, result }) => {
+						await update();
+						if (result.type === 'success') {
+							isDateCountryUpdated = true;
+						}
+						isLoading = false;
+					};
+				}}
+			>
+				<Button type="submit" disabled={isLoading}>Update</Button>
+			</form>
+		</div>
 	{/if}
 </div>
