@@ -8,7 +8,6 @@ export const load: PageServerLoad = async (context) => {
 	try {
 		const db = drizzle(context.platform?.env.DB as D1Database);
 		const newItems = await db.select().from(new_item_list).orderBy(desc(new_item_list.createdAt));
-		console.log(newItems.length);
 		return {
 			new_item_list: newItems
 		};
