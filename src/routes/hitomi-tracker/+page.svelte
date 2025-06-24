@@ -2,6 +2,7 @@
 	import { type ColumnDef, getCoreRowModel } from '@tanstack/table-core';
 	import { enhance } from '$app/forms';
 	import { toast } from 'svelte-sonner';
+	import { onMount, onDestroy } from 'svelte';
 
 	import type { PageData } from './$types';
 	import { createSvelteTable, FlexRender } from '@/lib/components/ui/data-table';
@@ -14,9 +15,24 @@
 	type HitomiItem = typeof new_item_list.$inferSelect;
 
 	let isLoading = false;
+	let currentTime = new Date();
+	let timeInterval: NodeJS.Timeout;
+
+	// 실시간 시간 업데이트
+	onMount(() => {
+		timeInterval = setInterval(() => {
+			currentTime = new Date();
+		}, 1000); // 1초마다 업데이트
+	});
+
+	onDestroy(() => {
+		if (timeInterval) {
+			clearInterval(timeInterval);
+		}
+	});
 
 	// 시간 포맷팅 함수
-	function formatLastCrawlTime(timestamp: number | string | null): string {
+	function formatLastCrawlTime(timestamp: number | string | null, referenceTime: Date): string {
 		if (!timestamp) return '크롤링 기록이 없습니다';
 
 		let date: Date;
@@ -40,8 +56,8 @@
 			return '시간 형식 오류';
 		}
 
-		const now = new Date();
-		const diffMs = now.getTime() - date.getTime();
+		// 실시간 현재 시간 사용
+		const diffMs = referenceTime.getTime() - date.getTime();
 		const diffMinutes = Math.floor(diffMs / (1000 * 60));
 		const diffHours = Math.floor(diffMinutes / 60);
 		const diffDays = Math.floor(diffHours / 24);
@@ -60,6 +76,9 @@
 			minute: '2-digit'
 		});
 	}
+
+	// 반응형 상태: currentTime이 변경될 때마다 자동으로 재계산
+	$: formattedLastCrawlTime = formatLastCrawlTime(data.lastCrawlTime, currentTime);
 
 	// 컬럼 정의를 상수로 분리
 	const columns: ColumnDef<HitomiItem>[] = [
@@ -130,7 +149,7 @@
 		<div class="flex flex-col">
 			<h1 class="text-4xl font-bold">Hitomi Tracker</h1>
 			<p class="text-sm text-muted-foreground">
-				마지막 크롤링: {formatLastCrawlTime(data.lastCrawlTime)}
+				마지막 크롤링: {formattedLastCrawlTime}
 			</p>
 		</div>
 
