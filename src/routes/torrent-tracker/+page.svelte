@@ -116,7 +116,7 @@
 		};
 	};
 
-	let checkForm: HTMLFormElement;
+	let checkForm = $state<HTMLFormElement>();
 
 	const triggerDBCheck = () => {
 		if (!trendDate || !selectedCountry || isCheckingDB) return;

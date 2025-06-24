@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { PageData } from './$types';
 	import * as Table from '$lib/components/ui/table';
+	import { Button } from '@/lib/components/ui/button';
 
 	export let data: PageData;
 
@@ -61,6 +62,7 @@
 							<Table.Head class="w-48">등장 국가</Table.Head>
 							<Table.Head class="w-56">등장 기간</Table.Head>
 							<Table.Head class="w-20 text-center">등장 횟수</Table.Head>
+							<Table.Head class="w-20 text-center">BTDig</Table.Head>
 						</Table.Row>
 					</Table.Header>
 				</Table.Root>
@@ -115,6 +117,18 @@
 									>
 										{item.totalEntries}
 									</span>
+								</Table.Cell>
+								<Table.Cell class="w-20 text-center">
+									<Button
+										size="sm"
+										onclick={() =>
+											window.open(
+												`https://btdig.com/search?q=${encodeURIComponent(item.name)}`,
+												'_blank'
+											)}
+									>
+										BTDig
+									</Button>
 								</Table.Cell>
 							</Table.Row>
 						{/each}
