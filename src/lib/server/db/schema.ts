@@ -9,7 +9,7 @@ export const hitomi_history = sqliteTable('hitomi-history', {
 	url: text('url').notNull(),
 	createdAt: integer('createdAt')
 		.notNull()
-		.default(sql`CURRENT_TIMESTAMP`)
+		.default(sql`(strftime('%s', 'now'))`)
 });
 
 export const new_item_list = sqliteTable('new-item-list', {
@@ -20,7 +20,7 @@ export const new_item_list = sqliteTable('new-item-list', {
 	url: text('url').notNull(),
 	createdAt: integer('createdAt')
 		.notNull()
-		.default(sql`CURRENT_TIMESTAMP`)
+		.default(sql`(strftime('%s', 'now'))`)
 });
 
 export const torrent_tracker_history = sqliteTable('torrent-tracker-history', {
@@ -31,5 +31,5 @@ export const torrent_tracker_history = sqliteTable('torrent-tracker-history', {
 	rank: integer('rank').notNull(),
 	createdAt: integer('createdAt')
 		.notNull()
-		.default(sql`CURRENT_TIMESTAMP`)
+		.default(sql`(strftime('%s', 'now'))`)
 });
