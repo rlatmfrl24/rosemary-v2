@@ -54,6 +54,8 @@
 	let isLoading = $state(false);
 	let isDateCountryUpdated = $state(false);
 	let selectedCountry = $state<(typeof COUNTRIES)[number]>('KR');
+	let isCheckingDB = $state(false);
+	let hasCheckedDB = $state(false);
 
 	// Computed values
 	const hasTableData = $derived(tableData.length > 0);
@@ -66,6 +68,7 @@
 		raw = '';
 		tableData = [];
 		isDateCountryUpdated = false;
+		hasCheckedDB = false;
 	};
 
 	const parseTrendRaw = () => {
@@ -94,7 +97,9 @@
 
 	// Form handlers
 	const handleCheckUpdated = ({ formData }: { formData: FormData }) => {
-		parseTrendRaw();
+		if (raw.trim()) {
+			parseTrendRaw();
+		}
 		formData.append('date', trendDate.toString());
 		formData.append('country', selectedCountry);
 
@@ -106,7 +111,35 @@
 				'isUpdated' in result.data
 			) {
 				isDateCountryUpdated = (result.data as { isUpdated: boolean }).isUpdated;
+				hasCheckedDB = true;
 			}
+		};
+	};
+
+	let checkForm: HTMLFormElement;
+
+	const triggerDBCheck = () => {
+		if (!trendDate || !selectedCountry || isCheckingDB) return;
+		checkForm?.requestSubmit();
+	};
+
+	const handleDBCheck = ({ formData }: { formData: FormData }) => {
+		isCheckingDB = true;
+		formData.append('date', trendDate.toString());
+		formData.append('country', selectedCountry);
+
+		return async ({ result }: { result: any }) => {
+			console.log('DB 조회 결과:', result); // 디버깅용 로그
+			if (
+				result.type === 'success' &&
+				result.data &&
+				typeof result.data === 'object' &&
+				'isUpdated' in result.data
+			) {
+				isDateCountryUpdated = (result.data as { isUpdated: boolean }).isUpdated;
+				hasCheckedDB = true;
+			}
+			isCheckingDB = false;
 		};
 	};
 
@@ -139,10 +172,15 @@
 
 	// Effects
 	$effect(() => {
-		// Reset update status when date or country changes
-		trendDate;
-		selectedCountry;
-		isDateCountryUpdated = false;
+		// Auto check DB when date or country changes
+		if (trendDate && selectedCountry) {
+			isDateCountryUpdated = false;
+			hasCheckedDB = false;
+			// 약간의 지연을 두어 중복 호출 방지
+			setTimeout(() => {
+				triggerDBCheck();
+			}, 100);
+		}
 	});
 </script>
 
@@ -194,12 +232,42 @@
 					<Calendar bind:value={trendDate} type="single" initialFocus />
 				</Popover.Content>
 			</Popover.Root>
+			<!-- Database status -->
+			<div class="flex items-center gap-2">
+				<span class="text-sm font-medium text-gray-700">데이터베이스 상태:</span>
+				{#if isCheckingDB}
+					<span class="text-sm font-medium text-blue-600 animate-pulse">조회 중...</span>
+				{:else if hasCheckedDB}
+					<span class="text-sm font-medium">
+						<span
+							class={isDateCountryUpdated
+								? 'text-green-600 bg-green-50 px-2 py-1 rounded'
+								: 'text-red-600 bg-red-50 px-2 py-1 rounded'}
+						>
+							{isDateCountryUpdated ? '✓ 이미 업데이트됨' : '✗ 아직 업데이트되지 않음'}
+						</span>
+					</span>
+				{:else}
+					<span class="text-sm font-medium text-gray-500">대기 중...</span>
+				{/if}
+			</div>
 		</div>
 
-		<Textarea placeholder="Enter your text here" bind:value={raw} />
+		<!-- Hidden form for automatic DB checking -->
+		<form
+			bind:this={checkForm}
+			method="post"
+			action="?/checkAlreadyUpdated"
+			use:enhance={handleDBCheck}
+			style="display: none;"
+		>
+			<button type="submit" tabindex="-1">Hidden Submit</button>
+		</form>
+
+		<Textarea placeholder="텍스트를 입력하세요" bind:value={raw} />
 
 		<form method="post" action="?/checkAlreadyUpdated" use:enhance={handleCheckUpdated}>
-			<Button type="submit">Check</Button>
+			<Button type="submit" disabled={!raw.trim()}>확인</Button>
 		</form>
 	{:else}
 		<!-- Results section -->
@@ -212,8 +280,6 @@
 						{isDateCountryUpdated ? 'Already updated' : 'Not updated'}
 					</span>
 				</span>
-
-				<Button onclick={resetState}>Reset</Button>
 			</div>
 		</div>
 
@@ -258,6 +324,7 @@
 					{isLoading ? 'Updating...' : 'Update'}
 				</Button>
 			</form>
+			<Button onclick={resetState}>Reset</Button>
 		</div>
 	{/if}
 </div>
