@@ -9,12 +9,25 @@
 	import * as Table from '$lib/components/ui/table';
 	import Button from '@/lib/components/ui/button/button.svelte';
 	import type { new_item_list } from '@/lib/server/db/schema';
+	import {
+		AlertDialog,
+		AlertDialogAction,
+		AlertDialogCancel,
+		AlertDialogContent,
+		AlertDialogDescription,
+		AlertDialogFooter,
+		AlertDialogHeader,
+		AlertDialogTitle,
+		AlertDialogTrigger
+	} from '@/lib/components/ui/alert-dialog';
 
 	export let data: PageData;
 
 	type HitomiItem = typeof new_item_list.$inferSelect;
 
 	let isLoading = false;
+	let isClearHistoryLoading = false;
+	let isDialogOpen = false;
 	let currentTime = new Date();
 	let timeInterval: NodeJS.Timeout;
 
@@ -129,6 +142,18 @@
 		};
 	}
 
+	// Clear history 전용 enhance 핸들러
+	function createClearHistoryEnhanceHandler() {
+		return () => {
+			isClearHistoryLoading = true;
+			return async ({ update }: { update: () => Promise<void> }) => {
+				await update();
+				isClearHistoryLoading = false;
+				isDialogOpen = false; // Dialog 닫기
+			};
+		};
+	}
+
 	// 코드 복사 기능 분리
 	function handleCopyCodesClick() {
 		const codes = data.new_item_list.map((item) => item.code).join('\n');
@@ -153,33 +178,69 @@
 			</p>
 		</div>
 
-		<div class="flex flex-row gap-2">
-			<Button onclick={handleCopyCodesClick} disabled={data.new_item_list.length === 0}>
-				Copy codes to clipboard
-			</Button>
-
-			<form method="post" action="?/clearNewItems" use:enhance={createEnhanceHandler()}>
-				<Button
-					type="submit"
-					name="action"
-					value="clearNewItems"
-					disabled={isLoading || data.new_item_list.length === 0}
-				>
-					Clear new items
+		<div class="flex justify-between items-center flex-1">
+			<div class="flex flex-row gap-2">
+				<Button onclick={handleCopyCodesClick} disabled={data.new_item_list.length === 0}>
+					Copy codes to clipboard
 				</Button>
-			</form>
 
-			<form method="post" action="?/clearHistory" use:enhance={createEnhanceHandler()}>
-				<Button type="submit" name="action" value="clearHistory" disabled={isLoading}>
-					Clear history
-				</Button>
-			</form>
+				<form method="post" action="?/clearNewItems" use:enhance={createEnhanceHandler()}>
+					<Button
+						type="submit"
+						name="action"
+						value="clearNewItems"
+						disabled={isLoading || data.new_item_list.length === 0}
+					>
+						Clear new items
+					</Button>
+				</form>
 
-			<form method="post" action="?/callCrawlApi" use:enhance={createEnhanceHandler()}>
-				<Button type="submit" name="action" value="callCrawlApi" disabled={isLoading}>
-					Call crawl API
-				</Button>
-			</form>
+				<form method="post" action="?/callCrawlApi" use:enhance={createEnhanceHandler()}>
+					<Button type="submit" name="action" value="callCrawlApi" disabled={isLoading}>
+						Call crawl API
+					</Button>
+				</form>
+			</div>
+
+			<AlertDialog bind:open={isDialogOpen}>
+				<AlertDialogTrigger>
+					<Button type="submit" name="action" value="clearHistory" disabled={isLoading}>
+						Clear history
+					</Button>
+				</AlertDialogTrigger>
+				<AlertDialogContent>
+					<AlertDialogHeader>
+						<AlertDialogTitle>Are you sure?</AlertDialogTitle>
+						<AlertDialogDescription>This action cannot be undone.</AlertDialogDescription>
+					</AlertDialogHeader>
+					<AlertDialogFooter>
+						<AlertDialogCancel>Cancel</AlertDialogCancel>
+						<form
+							method="post"
+							action="?/clearHistory"
+							use:enhance={createClearHistoryEnhanceHandler()}
+						>
+							<AlertDialogAction
+								type="submit"
+								name="action"
+								value="clearHistory"
+								disabled={isClearHistoryLoading}
+							>
+								{#if isClearHistoryLoading}
+									<div class="flex items-center gap-2">
+										<div
+											class="animate-spin rounded-full border-2 border-gray-300 border-t-blue-600 h-4 w-4"
+										></div>
+										<span>Processing...</span>
+									</div>
+								{:else}
+									Confirm
+								{/if}
+							</AlertDialogAction>
+						</form>
+					</AlertDialogFooter>
+				</AlertDialogContent>
+			</AlertDialog>
 		</div>
 	</div>
 
