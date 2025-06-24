@@ -15,6 +15,52 @@
 
 	let isLoading = false;
 
+	// 시간 포맷팅 함수
+	function formatLastCrawlTime(timestamp: number | string | null): string {
+		if (!timestamp) return '크롤링 기록이 없습니다';
+
+		let date: Date;
+
+		// Unix timestamp (초 단위)를 Date 객체로 변환
+		if (typeof timestamp === 'number') {
+			date = new Date(timestamp * 1000);
+		} else if (typeof timestamp === 'string') {
+			// 문자열인 경우 숫자로 변환 후 처리
+			const numTimestamp = parseInt(timestamp, 10);
+			if (isNaN(numTimestamp)) {
+				return '시간 형식 오류';
+			}
+			date = new Date(numTimestamp * 1000);
+		} else {
+			return '시간 형식 오류';
+		}
+
+		// 유효한 날짜인지 확인
+		if (isNaN(date.getTime())) {
+			return '시간 형식 오류';
+		}
+
+		const now = new Date();
+		const diffMs = now.getTime() - date.getTime();
+		const diffMinutes = Math.floor(diffMs / (1000 * 60));
+		const diffHours = Math.floor(diffMinutes / 60);
+		const diffDays = Math.floor(diffHours / 24);
+
+		if (diffMinutes < 1) return '방금 전';
+		if (diffMinutes < 60) return `${diffMinutes}분 전`;
+		if (diffHours < 24) return `${diffHours}시간 전`;
+		if (diffDays < 7) return `${diffDays}일 전`;
+
+		// 일주일이 지난 경우 절대 시간 표시
+		return date.toLocaleString('ko-KR', {
+			year: 'numeric',
+			month: '2-digit',
+			day: '2-digit',
+			hour: '2-digit',
+			minute: '2-digit'
+		});
+	}
+
 	// 컬럼 정의를 상수로 분리
 	const columns: ColumnDef<HitomiItem>[] = [
 		{
@@ -81,7 +127,12 @@
 
 <div class="flex h-full flex-col gap-4 p-4">
 	<div class="flex flex-row items-center gap-4">
-		<h1 class="text-4xl font-bold">Hitomi Tracker</h1>
+		<div class="flex flex-col">
+			<h1 class="text-4xl font-bold">Hitomi Tracker</h1>
+			<p class="text-sm text-muted-foreground">
+				마지막 크롤링: {formatLastCrawlTime(data.lastCrawlTime)}
+			</p>
+		</div>
 
 		<div class="flex flex-row gap-2">
 			<Button onclick={handleCopyCodesClick} disabled={data.new_item_list.length === 0}>
