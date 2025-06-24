@@ -29,6 +29,14 @@
 		rank: number;
 	}
 
+	// 국가별 상태 인터페이스 추가
+	interface CountryStatus {
+		country: string;
+		isUpdated: boolean;
+		isChecking: boolean;
+		hasChecked: boolean;
+	}
+
 	// Constants
 	const COUNTRIES = ['KR', 'US', 'JP', 'CN'] as const;
 	const URLS = {
@@ -52,10 +60,21 @@
 	);
 	let raw = $state('');
 	let isLoading = $state(false);
-	let isDateCountryUpdated = $state(false);
 	let selectedCountry = $state<(typeof COUNTRIES)[number]>('KR');
-	let isCheckingDB = $state(false);
-	let hasCheckedDB = $state(false);
+
+	// 통합된 국가별 업데이트 상태 관리
+	let countryStatuses = $state<CountryStatus[]>(
+		COUNTRIES.map((country) => ({
+			country,
+			isUpdated: false,
+			isChecking: false,
+			hasChecked: false
+		}))
+	);
+
+	// 단일 재사용 form 참조
+	let universalCheckForm = $state<HTMLFormElement>();
+	let pendingChecks = $state<string[]>([]);
 
 	// Computed values
 	const hasTableData = $derived(tableData.length > 0);
@@ -63,12 +82,43 @@
 		trendDate ? dateFormatter.format(trendDate.toDate(getLocalTimeZone())) : 'Select a date'
 	);
 
+	// 선택된 국가의 상태 (기존 isDateCountryUpdated 대체)
+	const selectedCountryStatus = $derived(
+		countryStatuses.find((status) => status.country === selectedCountry)
+	);
+	const isDateCountryUpdated = $derived(selectedCountryStatus?.isUpdated || false);
+	const isCheckingDB = $derived(selectedCountryStatus?.isChecking || false);
+	const hasCheckedDB = $derived(selectedCountryStatus?.hasChecked || false);
+
+	// 전체 상태 체크
+	const isAnyCountryChecking = $derived(countryStatuses.some((status) => status.isChecking));
+	const allCountriesChecked = $derived(countryStatuses.every((status) => status.hasChecked));
+
 	// Utility functions
 	const resetState = () => {
 		raw = '';
 		tableData = [];
-		isDateCountryUpdated = false;
-		hasCheckedDB = false;
+		resetCountryStatuses();
+	};
+
+	// 모든 국가의 업데이트 상태를 초기화하는 함수
+	const resetCountryStatuses = () => {
+		countryStatuses = COUNTRIES.map((country) => ({
+			country,
+			isUpdated: false,
+			isChecking: false,
+			hasChecked: false
+		}));
+	};
+
+	// 특정 국가의 상태를 업데이트하는 헬퍼 함수
+	const updateCountryStatus = (
+		country: string,
+		updates: Partial<Omit<CountryStatus, 'country'>>
+	) => {
+		countryStatuses = countryStatuses.map((status) =>
+			status.country === country ? { ...status, ...updates } : status
+		);
 	};
 
 	const parseTrendRaw = () => {
@@ -110,36 +160,43 @@
 				typeof result.data === 'object' &&
 				'isUpdated' in result.data
 			) {
-				isDateCountryUpdated = (result.data as { isUpdated: boolean }).isUpdated;
-				hasCheckedDB = true;
+				const isUpdated = (result.data as { isUpdated: boolean }).isUpdated;
+				updateCountryStatus(selectedCountry, { isUpdated, hasChecked: true });
 			}
 		};
 	};
 
-	let checkForm = $state<HTMLFormElement>();
+	// 통합된 DB 체크 핸들러
+	const createUniversalCheckHandler = (targetCountry?: string) => {
+		return ({ formData }: { formData: FormData }) => {
+			const country = targetCountry || pendingChecks[0];
+			if (!country) return;
 
-	const triggerDBCheck = () => {
-		if (!trendDate || !selectedCountry || isCheckingDB) return;
-		checkForm?.requestSubmit();
-	};
+			updateCountryStatus(country, { isChecking: true });
+			formData.append('date', trendDate.toString());
+			formData.append('country', country);
 
-	const handleDBCheck = ({ formData }: { formData: FormData }) => {
-		isCheckingDB = true;
-		formData.append('date', trendDate.toString());
-		formData.append('country', selectedCountry);
+			return async ({ result }: { result: any }) => {
+				if (
+					result.type === 'success' &&
+					result.data &&
+					typeof result.data === 'object' &&
+					'isUpdated' in result.data
+				) {
+					const isUpdated = (result.data as { isUpdated: boolean }).isUpdated;
+					updateCountryStatus(country, { isUpdated, isChecking: false, hasChecked: true });
+				} else {
+					updateCountryStatus(country, { isChecking: false, hasChecked: true });
+				}
 
-		return async ({ result }: { result: any }) => {
-			console.log('DB 조회 결과:', result); // 디버깅용 로그
-			if (
-				result.type === 'success' &&
-				result.data &&
-				typeof result.data === 'object' &&
-				'isUpdated' in result.data
-			) {
-				isDateCountryUpdated = (result.data as { isUpdated: boolean }).isUpdated;
-				hasCheckedDB = true;
-			}
-			isCheckingDB = false;
+				// 대기 중인 다음 국가 체크
+				if (!targetCountry) {
+					pendingChecks = pendingChecks.slice(1);
+					if (pendingChecks.length > 0) {
+						setTimeout(() => universalCheckForm?.requestSubmit(), 50);
+					}
+				}
+			};
 		};
 	};
 
@@ -156,7 +213,7 @@
 		return async ({ update, result }: { update: () => Promise<void>; result: any }) => {
 			await update();
 			if (result.type === 'success') {
-				isDateCountryUpdated = true;
+				updateCountryStatus(selectedCountry, { isUpdated: true });
 			}
 			isLoading = false;
 		};
@@ -170,16 +227,46 @@
 		};
 	};
 
-	// Effects
+	// 선택된 국가의 상태 확인
+	const checkSelectedCountry = () => {
+		if (!trendDate || !selectedCountry || isCheckingDB) return;
+
+		// 기존 상태 초기화
+		updateCountryStatus(selectedCountry, { hasChecked: false });
+
+		// 대기열에 추가하고 체크 시작
+		pendingChecks = [selectedCountry];
+		universalCheckForm?.requestSubmit();
+	};
+
+	// 모든 국가의 업데이트 여부를 확인하는 함수 (병렬 처리)
+	const checkAllCountriesStatus = () => {
+		if (!trendDate) return;
+
+		resetCountryStatuses();
+
+		// 모든 국가를 대기열에 추가
+		pendingChecks = [...COUNTRIES];
+
+		// 첫 번째 국가 체크 시작
+		if (pendingChecks.length > 0) {
+			universalCheckForm?.requestSubmit();
+		}
+	};
+
+	// Effects - 통합된 단일 effect
 	$effect(() => {
-		// Auto check DB when date or country changes
-		if (trendDate && selectedCountry) {
-			isDateCountryUpdated = false;
-			hasCheckedDB = false;
-			// 약간의 지연을 두어 중복 호출 방지
+		if (trendDate) {
+			// 선택된 국가 체크와 전체 국가 체크를 순차적으로 실행
 			setTimeout(() => {
-				triggerDBCheck();
+				if (selectedCountry) {
+					checkSelectedCountry();
+				}
 			}, 100);
+
+			setTimeout(() => {
+				checkAllCountriesStatus();
+			}, 200);
 		}
 	});
 </script>
@@ -198,6 +285,33 @@
 		<form method="post" action="?/clearDB" use:enhance={handleClearDB}>
 			<Button type="submit" disabled={isLoading}>Clear All DB</Button>
 		</form>
+	</div>
+
+	<!-- 국가별 업데이트 상태 표시 -->
+	<div class="border rounded-md p-4 bg-gray-50">
+		<h3 class="text-lg font-semibold mb-3">
+			{formattedDate} 국가별 업데이트 상태
+		</h3>
+		<div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+			{#each countryStatuses as status (status.country)}
+				<div class="flex items-center justify-between p-3 bg-white rounded border">
+					<span class="font-medium text-gray-700">{status.country}</span>
+					{#if status.isChecking}
+						<span class="text-xs text-blue-600 animate-pulse">확인 중...</span>
+					{:else if status.hasChecked}
+						<span
+							class={status.isUpdated
+								? 'text-xs text-green-600 bg-green-50 px-2 py-1 rounded font-medium'
+								: 'text-xs text-red-600 bg-red-50 px-2 py-1 rounded font-medium'}
+						>
+							{status.isUpdated ? '✓ 완료' : '✗ 미완료'}
+						</span>
+					{:else}
+						<span class="text-xs text-gray-400">대기 중</span>
+					{/if}
+				</div>
+			{/each}
+		</div>
 	</div>
 
 	{#if !hasTableData}
@@ -253,12 +367,12 @@
 			</div>
 		</div>
 
-		<!-- Hidden form for automatic DB checking -->
+		<!-- Universal hidden form for all country status checking -->
 		<form
-			bind:this={checkForm}
+			bind:this={universalCheckForm}
 			method="post"
 			action="?/checkAlreadyUpdated"
-			use:enhance={handleDBCheck}
+			use:enhance={createUniversalCheckHandler()}
 			style="display: none;"
 		>
 			<button type="submit" tabindex="-1">Hidden Submit</button>

@@ -17,12 +17,14 @@ export const actions: Actions = {
 		const formData = await event.request.formData();
 		const date = formData.get('date') as string;
 		const country = formData.get('country') as string;
+
 		const result = await db
 			.select()
 			.from(torrent_tracker_history)
 			.where(
 				and(eq(torrent_tracker_history.date, date), eq(torrent_tracker_history.country, country))
 			);
+
 		const isUpdated = result.length > 0;
 		return { isUpdated };
 	},
