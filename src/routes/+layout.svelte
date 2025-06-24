@@ -1,14 +1,14 @@
 <script lang="ts">
-import "../app.css";
-import Button from "$lib/components/ui/button/button.svelte";
-import { Toaster } from "$lib/components/ui/sonner/index.js";
+	import '../app.css';
+	import Button from '$lib/components/ui/button/button.svelte';
+	import { Toaster } from '$lib/components/ui/sonner/index.js';
 
-const { children } = $props();
+	const { children } = $props();
 
-// set the title of the page
-$effect(() => {
-	document.title = "Rosemary";
-});
+	// set the title of the page
+	$effect(() => {
+		document.title = 'Rosemary';
+	});
 </script>
 
 <Toaster position="bottom-center" richColors />
@@ -19,6 +19,7 @@ $effect(() => {
 		<nav class="flex items-center gap-4">
 			<a href="/hitomi-tracker">Hitomi Tracker</a>
 			<a href="/torrent-tracker">Torrent Tracker</a>
+			<a href="/torrent-trend">Torrent Trend</a>
 		</nav>
 		<div class="flex items-center gap-4 ml-auto">
 			<Button>Login</Button>
