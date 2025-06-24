@@ -9,8 +9,13 @@ export const load: PageServerLoad = async (context) => {
 		const db = drizzle(context.platform?.env.DB as D1Database);
 		const newItems = await db.select().from(new_item_list).orderBy(desc(new_item_list.createdAt));
 
-		// 마지막 크롤링 시간 계산
-		const lastCrawlTime = newItems.length > 0 ? newItems[0].createdAt : null;
+		// 마지막 크롤링 시간 계산 - hitomi_history 테이블에서 가져오기
+		const historyItems = await db
+			.select()
+			.from(hitomi_history)
+			.orderBy(desc(hitomi_history.createdAt))
+			.limit(1);
+		const lastCrawlTime = historyItems.length > 0 ? historyItems[0].createdAt : null;
 
 		return {
 			new_item_list: newItems,
