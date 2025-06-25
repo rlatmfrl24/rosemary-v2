@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
-	import Button from '@/lib/components/ui/button/button.svelte';
+	import { buttonVariants } from '@/lib/components/ui/button';
 	import {
 		AlertDialog,
 		AlertDialogAction,
@@ -29,10 +29,14 @@
 </script>
 
 <AlertDialog bind:open={isDialogOpen}>
-	<AlertDialogTrigger>
-		<Button type="submit" name="action" value="clearHistory" disabled={isLoading}>
-			Clear history
-		</Button>
+	<AlertDialogTrigger
+		type="submit"
+		name="action"
+		value="clearHistory"
+		disabled={isLoading}
+		class={buttonVariants()}
+	>
+		Clear history
 	</AlertDialogTrigger>
 	<AlertDialogContent>
 		<AlertDialogHeader>
