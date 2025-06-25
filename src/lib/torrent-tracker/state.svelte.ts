@@ -30,7 +30,6 @@ export class TorrentTrackerState {
 		)
 	);
 
-	checkAllForm = $state<HTMLFormElement>();
 	checkInProgress = $state(false);
 	prevTrendDate = $state<string>('');
 	isInitialized = $state(false);

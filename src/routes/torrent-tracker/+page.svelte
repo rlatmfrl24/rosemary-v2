@@ -1,14 +1,13 @@
 <script lang="ts">
 	import Button from '@/lib/components/ui/button/button.svelte';
 	import { DateFormatter, getLocalTimeZone, type DateValue } from '@internationalized/date';
-	import { enhance } from '$app/forms';
+	import { enhance, deserialize } from '$app/forms';
 
 	// 모듈화된 imports
 	import {
 		TorrentTrackerState,
 		parseTrendRaw,
 		convertToHistoryData,
-		openCountryDaily,
 		COUNTRIES,
 		type Country
 	} from '$lib/torrent-tracker';
@@ -57,45 +56,6 @@
 		};
 	};
 
-	const createCheckAllHandler = () => {
-		return ({ formData }: { formData: FormData }) => {
-			COUNTRIES.forEach((country: Country) => {
-				state.updateCountryStatus(country, { isChecking: true });
-			});
-
-			formData.append('date', state.trendDate!.toString());
-
-			return async ({ result }: { result: any }) => {
-				state.checkInProgress = false;
-
-				if (
-					result.type === 'success' &&
-					result.data &&
-					typeof result.data === 'object' &&
-					'statusMap' in result.data
-				) {
-					const statusMap = (result.data as { statusMap: Record<string, boolean> }).statusMap;
-
-					COUNTRIES.forEach((country: Country) => {
-						state.updateCountryStatus(country, {
-							isUpdated: statusMap[country] || false,
-							isChecking: false,
-							hasChecked: true
-						});
-					});
-				} else {
-					COUNTRIES.forEach((country: Country) => {
-						state.updateCountryStatus(country, {
-							isUpdated: false,
-							isChecking: false,
-							hasChecked: true
-						});
-					});
-				}
-			};
-		};
-	};
-
 	const handleUpdate = ({ formData }: { formData: FormData }) => {
 		state.isLoading = true;
 		const historyData = convertToHistoryData(
@@ -109,6 +69,7 @@
 			await update();
 			if (result.type === 'success') {
 				state.updateCountryStatus(state.selectedCountry, { isUpdated: true });
+				state.resetState();
 			}
 			state.isLoading = false;
 		};
@@ -122,21 +83,59 @@
 		};
 	};
 
-	const checkAllCountriesStatus = () => {
+	const checkAllCountriesStatus = async () => {
 		if (!state.trendDate || state.checkInProgress) return;
 
 		state.checkInProgress = true;
 
-		if (state.checkAllForm) {
-			state.checkAllForm.requestSubmit();
-		} else {
-			setTimeout(() => {
-				if (state.checkAllForm && state.checkInProgress) {
-					state.checkAllForm.requestSubmit();
-				} else {
-					state.checkInProgress = false;
-				}
-			}, 50);
+		// 모든 국가 상태를 checking으로 설정
+		COUNTRIES.forEach((country: Country) => {
+			state.updateCountryStatus(country, { isChecking: true });
+		});
+
+		try {
+			const formData = new FormData();
+			formData.append('date', state.trendDate.toString());
+
+			const response = await fetch('?/checkAllCountriesStatus', {
+				method: 'POST',
+				body: formData
+			});
+
+			const result = deserialize(await response.text());
+
+			if (result.type === 'success' && result.data && 'statusMap' in result.data) {
+				const statusMap = result.data.statusMap as Record<string, boolean>;
+
+				COUNTRIES.forEach((country: Country) => {
+					state.updateCountryStatus(country, {
+						isUpdated: statusMap[country] || false,
+						isChecking: false,
+						hasChecked: true
+					});
+				});
+			} else {
+				// 오류 처리
+				COUNTRIES.forEach((country: Country) => {
+					state.updateCountryStatus(country, {
+						isUpdated: false,
+						isChecking: false,
+						hasChecked: true
+					});
+				});
+			}
+		} catch (error) {
+			console.error('Error checking countries status:', error);
+			// 오류 시 모든 국가를 미완료로 처리
+			COUNTRIES.forEach((country: Country) => {
+				state.updateCountryStatus(country, {
+					isUpdated: false,
+					isChecking: false,
+					hasChecked: true
+				});
+			});
+		} finally {
+			state.checkInProgress = false;
 		}
 	};
 
@@ -172,7 +171,16 @@
 </script>
 
 <div class="flex flex-col h-full p-4 gap-4">
-	<h1 class="text-4xl font-bold">Torrent Tracker</h1>
+	<div class="flex items-center justify-between">
+		<h1 class="text-4xl font-bold">Torrent Tracker</h1>
+		<!-- Control buttons -->
+		<div class="flex items-center gap-2 flex-wrap">
+			<form method="post" action="?/clearDB" use:enhance={handleClearDB}>
+				<Button type="submit" disabled={state.isLoading}>Clear All DB</Button>
+			</form>
+		</div>
+	</div>
+
 	<!-- 국가별 업데이트 상태 표시 -->
 	<CountryStatusPanel
 		{formattedDate}
@@ -183,20 +191,10 @@
 		onDateChange={(date: DateValue | undefined) => {
 			if (date) state.trendDate = date;
 		}}
+		onCountrySelect={(country: Country) => {
+			state.selectedCountry = country;
+		}}
 	/>
-
-	<!-- Control buttons -->
-	<div class="flex items-center gap-2 flex-wrap">
-		{#each COUNTRIES as country}
-			<Button type="button" onclick={() => openCountryDaily(country)}>
-				{country} Daily
-			</Button>
-		{/each}
-
-		<form method="post" action="?/clearDB" use:enhance={handleClearDB}>
-			<Button type="submit" disabled={state.isLoading}>Clear All DB</Button>
-		</form>
-	</div>
 
 	{#if !state.hasTableData}
 		<!-- Input section -->
@@ -214,17 +212,6 @@
 				state.raw = value;
 			}}
 		/>
-
-		<!-- Hidden form for batch country status checking -->
-		<form
-			bind:this={state.checkAllForm}
-			method="post"
-			action="?/checkAllCountriesStatus"
-			use:enhance={createCheckAllHandler()}
-			style="display: none;"
-		>
-			<button type="submit" tabindex="-1">Hidden Submit</button>
-		</form>
 
 		<form method="post" action="?/checkAlreadyUpdated" use:enhance={handleCheckUpdated}>
 			<Button type="submit" disabled={!state.raw.trim()}>확인</Button>

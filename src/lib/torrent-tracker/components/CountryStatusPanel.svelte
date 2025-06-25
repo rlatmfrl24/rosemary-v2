@@ -5,7 +5,8 @@
 	import CalendarIcon from '@lucide/svelte/icons/calendar';
 	import { cn } from '$lib/utils.js';
 	import type { DateValue } from '@internationalized/date';
-	import type { CountryStatus } from '../types';
+	import type { CountryStatus, Country } from '../types';
+	import { openCountryDaily } from '../utils';
 
 	interface Props {
 		formattedDate: string;
@@ -14,6 +15,7 @@
 		checkInProgress: boolean;
 		onCheckAll: () => void;
 		onDateChange: (date: DateValue | undefined) => void;
+		onCountrySelect: (country: Country) => void;
 	}
 
 	let {
@@ -22,7 +24,8 @@
 		countryStatuses,
 		checkInProgress,
 		onCheckAll,
-		onDateChange
+		onDateChange,
+		onCountrySelect
 	}: Props = $props();
 
 	// 로컬 상태로 관리
@@ -75,10 +78,24 @@
 			{checkInProgress ? '확인 중...' : '전체 상태 확인'}
 		</Button>
 	</div>
-	<div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+	<div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
 		{#each countryStatuses as status (status.country)}
 			<div class="flex items-center justify-between p-3 bg-white rounded border">
-				<span class="font-medium text-gray-700">{status.country}</span>
+				<div class="flex items-center gap-2">
+					<span class="font-medium text-gray-700">{status.country}</span>
+					<Button
+						size="sm"
+						variant="outline"
+						class="h-6 px-2 text-xs"
+						onclick={() => {
+							const country = status.country as Country;
+							onCountrySelect(country);
+							openCountryDaily(country, localTrendDate?.toString());
+						}}
+					>
+						Visit
+					</Button>
+				</div>
 				{#if status.isChecking}
 					<span class="text-xs text-blue-600 animate-pulse">확인 중...</span>
 				{:else if status.hasChecked}

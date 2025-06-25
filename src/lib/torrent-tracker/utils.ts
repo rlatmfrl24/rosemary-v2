@@ -29,8 +29,10 @@ export const convertToHistoryData = (
 	}));
 };
 
-export const openCountryDaily = (country: Country): void => {
-	window.open(`${URLS.iKnowWhatYouDownload}${country}/daily`, '_blank');
+export const openCountryDaily = (country: Country, date?: string): void => {
+	const baseUrl = `${URLS.iKnowWhatYouDownload}${country}/daily`;
+	const url = date ? `${baseUrl}/q?statDate=${date}` : baseUrl;
+	window.open(url, '_blank');
 };
 
 export const removeItemFromArray = <T>(array: T[], predicate: (item: T) => boolean): T[] => {
