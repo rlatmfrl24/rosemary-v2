@@ -43,7 +43,6 @@
 	} as const;
 
 	const DEFAULT_DATE_OFFSET = 2;
-	const CHECK_DELAY = 500; // 상수로 관리
 
 	// Date formatter
 	const dateFormatter = new DateFormatter('en-US', { dateStyle: 'long' });
@@ -76,11 +75,9 @@
 		)
 	);
 
-	// Form과 체크 상태 관리
-	let universalCheckForm = $state<HTMLFormElement>();
-	let pendingChecks = $state<string[]>([]);
+	// 체크 상태 관리
+	let checkAllForm = $state<HTMLFormElement>();
 	let checkInProgress = $state(false);
-	let checkTimeout: NodeJS.Timeout | null = null; // 타임아웃 정리를 위한 참조
 
 	// Computed values
 	const hasTableData = $derived(tableData.length > 0);
@@ -131,12 +128,6 @@
 		);
 
 		checkInProgress = false;
-
-		// 진행 중인 타임아웃 정리
-		if (checkTimeout) {
-			clearTimeout(checkTimeout);
-			checkTimeout = null;
-		}
 	};
 
 	// 특정 국가 상태 업데이트 - 객체 업데이트로 반응성 개선
@@ -210,57 +201,44 @@
 		};
 	};
 
-	// 다음 체크 실행 함수 - 분리하여 재사용성 향상
-	const executeNextCheck = () => {
-		if (pendingChecks.length > 0) {
-			checkTimeout = setTimeout(() => {
-				if (universalCheckForm) {
-					universalCheckForm.requestSubmit();
-				} else {
-					// Form이 없으면 체크 중단
-					checkInProgress = false;
-					pendingChecks = [];
-				}
-				checkTimeout = null;
-			}, CHECK_DELAY);
-		} else {
-			checkInProgress = false;
-		}
-	};
-
-	// 통합된 DB 체크 핸들러 - 로직 단순화
-	const createUniversalCheckHandler = (targetCountry?: string) => {
+	// 모든 국가 상태를 일괄 조회하는 핸들러
+	const createCheckAllHandler = () => {
 		return ({ formData }: { formData: FormData }) => {
-			const country = targetCountry || pendingChecks[0];
-			if (!country) return;
+			// 모든 국가를 확인 중 상태로 설정
+			COUNTRIES.forEach((country) => {
+				updateCountryStatus(country, { isChecking: true });
+			});
 
-			updateCountryStatus(country, { isChecking: true });
 			formData.append('date', trendDate.toString());
-			formData.append('country', country);
 
 			return async ({ result }: { result: any }) => {
-				let isUpdated = false;
+				checkInProgress = false;
 
 				if (
 					result.type === 'success' &&
 					result.data &&
 					typeof result.data === 'object' &&
-					'isUpdated' in result.data
+					'statusMap' in result.data
 				) {
-					isUpdated = (result.data as { isUpdated: boolean }).isUpdated;
-				}
+					const statusMap = (result.data as { statusMap: Record<string, boolean> }).statusMap;
 
-				// 항상 상태를 업데이트하여 무한 로딩 방지
-				updateCountryStatus(country, {
-					isUpdated,
-					isChecking: false,
-					hasChecked: true
-				});
-
-				// 대기 중인 다음 국가 체크
-				if (!targetCountry) {
-					pendingChecks = pendingChecks.slice(1);
-					executeNextCheck();
+					// 모든 국가 상태를 한 번에 업데이트
+					COUNTRIES.forEach((country) => {
+						updateCountryStatus(country, {
+							isUpdated: statusMap[country] || false,
+							isChecking: false,
+							hasChecked: true
+						});
+					});
+				} else {
+					// 에러 발생시 모든 국가를 확인 완료 상태로 설정
+					COUNTRIES.forEach((country) => {
+						updateCountryStatus(country, {
+							isUpdated: false,
+							isChecking: false,
+							hasChecked: true
+						});
+					});
 				}
 			};
 		};
@@ -293,21 +271,20 @@
 		};
 	};
 
-	// 모든 국가 상태 확인 - 로직 단순화
+	// 모든 국가 상태 확인 - 일괄 조회로 단순화
 	const checkAllCountriesStatus = () => {
 		if (!trendDate || checkInProgress) return;
 
 		checkInProgress = true;
-		pendingChecks = [...COUNTRIES];
 
 		// Form이 준비되었는지 확인 후 실행
-		if (universalCheckForm) {
-			universalCheckForm.requestSubmit();
+		if (checkAllForm) {
+			checkAllForm.requestSubmit();
 		} else {
 			// Form이 아직 준비되지 않은 경우 다시 시도
 			setTimeout(() => {
-				if (universalCheckForm && checkInProgress) {
-					universalCheckForm.requestSubmit();
+				if (checkAllForm && checkInProgress) {
+					checkAllForm.requestSubmit();
 				} else {
 					checkInProgress = false;
 				}
@@ -347,13 +324,8 @@
 	// cleanup 함수 - 메모리 누수 방지
 	$effect(() => {
 		return () => {
-			if (checkTimeout) {
-				clearTimeout(checkTimeout);
-				checkTimeout = null;
-			}
 			// 진행 중인 체크 중단
 			checkInProgress = false;
-			pendingChecks = [];
 		};
 	});
 </script>
@@ -464,12 +436,12 @@
 			</div>
 		</div>
 
-		<!-- Universal hidden form for all country status checking -->
+		<!-- Hidden form for batch country status checking -->
 		<form
-			bind:this={universalCheckForm}
+			bind:this={checkAllForm}
 			method="post"
-			action="?/checkAlreadyUpdated"
-			use:enhance={createUniversalCheckHandler()}
+			action="?/checkAllCountriesStatus"
+			use:enhance={createCheckAllHandler()}
 			style="display: none;"
 		>
 			<button type="submit" tabindex="-1">Hidden Submit</button>
