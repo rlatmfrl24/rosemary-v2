@@ -217,11 +217,8 @@
 			onRawChange={(value) => {
 				state.raw = value;
 			}}
+			onParseSubmit={handleCheckUpdated}
 		/>
-
-		<form method="post" action="?/checkAlreadyUpdated" use:enhance={handleCheckUpdated}>
-			<Button type="submit" disabled={!state.raw.trim()}>확인</Button>
-		</form>
 	{:else}
 		<!-- Results section -->
 		<div class="flex items-center justify-between gap-4">
