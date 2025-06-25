@@ -37,5 +37,15 @@ export const actions: Actions = {
 		const db = new TorrentTrackerDatabase(event.platform?.env.DB as D1Database);
 		const result = await db.clearAll();
 		return { success: true, message: 'Clear DB successful', result };
+	},
+
+	reset: async (event) => {
+		const db = new TorrentTrackerDatabase(event.platform?.env.DB as D1Database);
+		const formData = await event.request.formData();
+		const date = formData.get('date') as string;
+		const country = formData.get('country') as string;
+
+		const result = await db.deleteByDateAndCountry(date, country);
+		return { success: true, message: 'Reset successful', result };
 	}
 };
