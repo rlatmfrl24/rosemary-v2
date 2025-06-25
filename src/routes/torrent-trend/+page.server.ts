@@ -50,7 +50,7 @@ export const load: PageServerLoad = async (event) => {
 			return acc;
 		}, {});
 
-		// 배열로 변환하고 정렬 (최고 순위 기준)
+		// 배열로 변환하고 정렬 (등장 횟수 내림차순 기준 -> 평균 순위 오름차순 기준 -> 최고 순위 오름차순 기준)
 		const trendData: TorrentTrendItem[] = Object.values(groupedData)
 			.map((group: GroupedItem) => ({
 				name: group.name,
@@ -63,7 +63,11 @@ export const load: PageServerLoad = async (event) => {
 					group.ranks.reduce((sum: number, rank: number) => sum + rank, 0) / group.ranks.length
 				)
 			}))
-			.sort((a: TorrentTrendItem, b: TorrentTrendItem) => a.bestRank - b.bestRank);
+			.sort((a: TorrentTrendItem, b: TorrentTrendItem) => {
+				if (a.totalEntries !== b.totalEntries) return b.totalEntries - a.totalEntries;
+				if (a.avgRank !== b.avgRank) return a.avgRank - b.avgRank;
+				return a.bestRank - b.bestRank;
+			});
 
 		return {
 			trendData

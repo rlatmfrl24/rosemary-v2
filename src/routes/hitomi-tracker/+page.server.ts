@@ -1,48 +1,41 @@
-import { hitomi_history, new_item_list } from '@/lib/server/db/schema';
 import type { Actions, PageServerLoad } from '../$types';
-import { drizzle } from 'drizzle-orm/d1';
 import { GET } from '../api/crawl/+server';
-import { desc } from 'drizzle-orm';
+import {
+	getNewItems,
+	getLastCrawlTime,
+	clearNewItems,
+	clearHistory
+} from '@/lib/server/hitomi-tracker/database';
 
 export const load: PageServerLoad = async (context) => {
-	try {
-		const db = drizzle(context.platform?.env.DB as D1Database);
-		const newItems = await db.select().from(new_item_list).orderBy(desc(new_item_list.createdAt));
+	const db = context.platform?.env.DB as D1Database;
 
-		// 마지막 크롤링 시간 계산 - hitomi_history 테이블에서 가져오기
-		const historyItems = await db
-			.select()
-			.from(hitomi_history)
-			.orderBy(desc(hitomi_history.createdAt))
-			.limit(1);
-		const lastCrawlTime = historyItems.length > 0 ? historyItems[0].createdAt : null;
+	const [newItems, lastCrawlTime] = await Promise.all([getNewItems(db), getLastCrawlTime(db)]);
 
-		return {
-			new_item_list: newItems,
-			lastCrawlTime
-		};
-	} catch (e) {
-		console.error(e);
-		return {
-			new_item_list: [],
-			lastCrawlTime: null
-		};
-	}
+	return {
+		new_item_list: newItems,
+		lastCrawlTime
+	};
 };
 
 export const actions: Actions = {
 	clearNewItems: async (context) => {
-		const db = drizzle(context.platform?.env.DB as D1Database);
-		await db.delete(new_item_list).execute();
-		return { success: true };
+		const db = context.platform?.env.DB as D1Database;
+		const success = await clearNewItems(db);
+		return { success };
 	},
 	clearHistory: async (context) => {
-		const db = drizzle(context.platform?.env.DB as D1Database);
-		await db.delete(hitomi_history).execute();
-		return { success: true };
+		const db = context.platform?.env.DB as D1Database;
+		const success = await clearHistory(db);
+		return { success };
 	},
 	callCrawlApi: async (context) => {
-		await GET(context as never);
-		return { success: true };
+		try {
+			await GET(context as never);
+			return { success: true };
+		} catch (error) {
+			console.error('Failed to call crawl API:', error);
+			return { success: false };
+		}
 	}
 };
