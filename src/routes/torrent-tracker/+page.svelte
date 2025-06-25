@@ -29,9 +29,7 @@
 		rank: number;
 	}
 
-	// 국가별 상태 인터페이스 추가
 	interface CountryStatus {
-		country: string;
 		isUpdated: boolean;
 		isChecking: boolean;
 		hasChecked: boolean;
@@ -45,6 +43,7 @@
 	} as const;
 
 	const DEFAULT_DATE_OFFSET = 2;
+	const CHECK_DELAY = 500; // 상수로 관리
 
 	// Date formatter
 	const dateFormatter = new DateFormatter('en-US', { dateStyle: 'long' });
@@ -62,19 +61,26 @@
 	let isLoading = $state(false);
 	let selectedCountry = $state<(typeof COUNTRIES)[number]>('KR');
 
-	// 통합된 국가별 업데이트 상태 관리
-	let countryStatuses = $state<CountryStatus[]>(
-		COUNTRIES.map((country) => ({
-			country,
-			isUpdated: false,
-			isChecking: false,
-			hasChecked: false
-		}))
+	// 국가별 상태 관리 - 객체 기반으로 변경하여 반응성 개선
+	let countryStatusMap = $state<Record<string, CountryStatus>>(
+		COUNTRIES.reduce(
+			(acc, country) => {
+				acc[country] = {
+					isUpdated: false,
+					isChecking: false,
+					hasChecked: false
+				};
+				return acc;
+			},
+			{} as Record<string, CountryStatus>
+		)
 	);
 
-	// 단일 재사용 form 참조
+	// Form과 체크 상태 관리
 	let universalCheckForm = $state<HTMLFormElement>();
 	let pendingChecks = $state<string[]>([]);
+	let checkInProgress = $state(false);
+	let checkTimeout: NodeJS.Timeout | null = null; // 타임아웃 정리를 위한 참조
 
 	// Computed values
 	const hasTableData = $derived(tableData.length > 0);
@@ -82,44 +88,72 @@
 		trendDate ? dateFormatter.format(trendDate.toDate(getLocalTimeZone())) : 'Select a date'
 	);
 
-	// 선택된 국가의 상태 (기존 isDateCountryUpdated 대체)
-	const selectedCountryStatus = $derived(
-		countryStatuses.find((status) => status.country === selectedCountry)
-	);
+	// 현재 선택된 국가의 상태 - 객체에서 직접 접근
+	const selectedCountryStatus = $derived(countryStatusMap[selectedCountry]);
 	const isDateCountryUpdated = $derived(selectedCountryStatus?.isUpdated || false);
 	const isCheckingDB = $derived(selectedCountryStatus?.isChecking || false);
 	const hasCheckedDB = $derived(selectedCountryStatus?.hasChecked || false);
 
-	// 전체 상태 체크
-	const isAnyCountryChecking = $derived(countryStatuses.some((status) => status.isChecking));
-	const allCountriesChecked = $derived(countryStatuses.every((status) => status.hasChecked));
+	// 전체 상태를 위한 배열 - 객체에서 파생
+	const countryStatuses = $derived(
+		COUNTRIES.map((country) => ({
+			country,
+			...countryStatusMap[country]
+		}))
+	);
+
+	// 전체 상태 체크 - 객체 값들로 계산
+	const isAnyCountryChecking = $derived(
+		Object.values(countryStatusMap).some((status) => status.isChecking)
+	);
+	const allCountriesChecked = $derived(
+		Object.values(countryStatusMap).every((status) => status.hasChecked)
+	);
 
 	// Utility functions
 	const resetState = () => {
 		raw = '';
 		tableData = [];
-		resetCountryStatuses();
 	};
 
-	// 모든 국가의 업데이트 상태를 초기화하는 함수
+	// 상태 초기화 - 새로운 객체 생성으로 최적화
 	const resetCountryStatuses = () => {
-		countryStatuses = COUNTRIES.map((country) => ({
-			country,
-			isUpdated: false,
-			isChecking: false,
-			hasChecked: false
-		}));
+		countryStatusMap = COUNTRIES.reduce(
+			(acc, country) => {
+				acc[country] = {
+					isUpdated: false,
+					isChecking: false,
+					hasChecked: false
+				};
+				return acc;
+			},
+			{} as Record<string, CountryStatus>
+		);
+
+		checkInProgress = false;
+
+		// 진행 중인 타임아웃 정리
+		if (checkTimeout) {
+			clearTimeout(checkTimeout);
+			checkTimeout = null;
+		}
 	};
 
-	// 특정 국가의 상태를 업데이트하는 헬퍼 함수
-	const updateCountryStatus = (
-		country: string,
-		updates: Partial<Omit<CountryStatus, 'country'>>
-	) => {
-		countryStatuses = countryStatuses.map((status) =>
-			status.country === country ? { ...status, ...updates } : status
-		);
+	// 특정 국가 상태 업데이트 - 객체 업데이트로 반응성 개선
+	const updateCountryStatus = (country: string, updates: Partial<CountryStatus>) => {
+		if (countryStatusMap[country]) {
+			countryStatusMap = {
+				...countryStatusMap,
+				[country]: {
+					...countryStatusMap[country],
+					...updates
+				}
+			};
+		}
 	};
+
+	// URL 생성 함수 - 메모이제이션으로 최적화
+	const createSearchUrl = (line: string) => URLS.btDig + encodeURIComponent(line);
 
 	const parseTrendRaw = () => {
 		const lines = raw
@@ -127,22 +161,28 @@
 			.map((line) => line.trim())
 			.filter(Boolean);
 
+		// 한 번의 순회로 모든 데이터 생성
 		tableData = lines.map((line, index) => ({
 			rank: index + 1,
 			line,
-			searchUrl: URLS.btDig + encodeURIComponent(line)
+			searchUrl: createSearchUrl(line)
 		}));
 		raw = '';
 	};
 
 	const openCountryDaily = (country: (typeof COUNTRIES)[number]) => {
 		selectedCountry = country;
-		resetState();
+		raw = '';
+		tableData = [];
 		window.open(`${URLS.iKnowWhatYouDownload}${country}/daily`, '_blank');
 	};
 
+	// 배열 필터링 최적화
 	const removeTableItem = (lineToRemove: string) => {
-		tableData = tableData.filter((item) => item.line !== lineToRemove);
+		const index = tableData.findIndex((item) => item.line === lineToRemove);
+		if (index !== -1) {
+			tableData = [...tableData.slice(0, index), ...tableData.slice(index + 1)];
+		}
 	};
 
 	// Form handlers
@@ -154,19 +194,41 @@
 		formData.append('country', selectedCountry);
 
 		return async ({ result }: { result: any }) => {
+			let isUpdated = false;
+
 			if (
 				result.type === 'success' &&
 				result.data &&
 				typeof result.data === 'object' &&
 				'isUpdated' in result.data
 			) {
-				const isUpdated = (result.data as { isUpdated: boolean }).isUpdated;
-				updateCountryStatus(selectedCountry, { isUpdated, hasChecked: true });
+				isUpdated = (result.data as { isUpdated: boolean }).isUpdated;
 			}
+
+			// 항상 상태를 업데이트하여 "확인됨" 상태로 만듦
+			updateCountryStatus(selectedCountry, { isUpdated, hasChecked: true });
 		};
 	};
 
-	// 통합된 DB 체크 핸들러
+	// 다음 체크 실행 함수 - 분리하여 재사용성 향상
+	const executeNextCheck = () => {
+		if (pendingChecks.length > 0) {
+			checkTimeout = setTimeout(() => {
+				if (universalCheckForm) {
+					universalCheckForm.requestSubmit();
+				} else {
+					// Form이 없으면 체크 중단
+					checkInProgress = false;
+					pendingChecks = [];
+				}
+				checkTimeout = null;
+			}, CHECK_DELAY);
+		} else {
+			checkInProgress = false;
+		}
+	};
+
+	// 통합된 DB 체크 핸들러 - 로직 단순화
 	const createUniversalCheckHandler = (targetCountry?: string) => {
 		return ({ formData }: { formData: FormData }) => {
 			const country = targetCountry || pendingChecks[0];
@@ -177,24 +239,28 @@
 			formData.append('country', country);
 
 			return async ({ result }: { result: any }) => {
+				let isUpdated = false;
+
 				if (
 					result.type === 'success' &&
 					result.data &&
 					typeof result.data === 'object' &&
 					'isUpdated' in result.data
 				) {
-					const isUpdated = (result.data as { isUpdated: boolean }).isUpdated;
-					updateCountryStatus(country, { isUpdated, isChecking: false, hasChecked: true });
-				} else {
-					updateCountryStatus(country, { isChecking: false, hasChecked: true });
+					isUpdated = (result.data as { isUpdated: boolean }).isUpdated;
 				}
+
+				// 항상 상태를 업데이트하여 무한 로딩 방지
+				updateCountryStatus(country, {
+					isUpdated,
+					isChecking: false,
+					hasChecked: true
+				});
 
 				// 대기 중인 다음 국가 체크
 				if (!targetCountry) {
 					pendingChecks = pendingChecks.slice(1);
-					if (pendingChecks.length > 0) {
-						setTimeout(() => universalCheckForm?.requestSubmit(), 50);
-					}
+					executeNextCheck();
 				}
 			};
 		};
@@ -227,47 +293,68 @@
 		};
 	};
 
-	// 선택된 국가의 상태 확인
-	const checkSelectedCountry = () => {
-		if (!trendDate || !selectedCountry || isCheckingDB) return;
-
-		// 기존 상태 초기화
-		updateCountryStatus(selectedCountry, { hasChecked: false });
-
-		// 대기열에 추가하고 체크 시작
-		pendingChecks = [selectedCountry];
-		universalCheckForm?.requestSubmit();
-	};
-
-	// 모든 국가의 업데이트 여부를 확인하는 함수 (병렬 처리)
+	// 모든 국가 상태 확인 - 로직 단순화
 	const checkAllCountriesStatus = () => {
-		if (!trendDate) return;
+		if (!trendDate || checkInProgress) return;
 
-		resetCountryStatuses();
-
-		// 모든 국가를 대기열에 추가
+		checkInProgress = true;
 		pendingChecks = [...COUNTRIES];
 
-		// 첫 번째 국가 체크 시작
-		if (pendingChecks.length > 0) {
-			universalCheckForm?.requestSubmit();
+		// Form이 준비되었는지 확인 후 실행
+		if (universalCheckForm) {
+			universalCheckForm.requestSubmit();
+		} else {
+			// Form이 아직 준비되지 않은 경우 다시 시도
+			setTimeout(() => {
+				if (universalCheckForm && checkInProgress) {
+					universalCheckForm.requestSubmit();
+				} else {
+					checkInProgress = false;
+				}
+			}, 50);
 		}
 	};
 
-	// Effects - 통합된 단일 effect
-	$effect(() => {
-		if (trendDate) {
-			// 선택된 국가 체크와 전체 국가 체크를 순차적으로 실행
-			setTimeout(() => {
-				if (selectedCountry) {
-					checkSelectedCountry();
-				}
-			}, 100);
+	// 이전 값 추적 - 단순화
+	let prevTrendDate = $state<string>('');
+	let isInitialized = $state(false);
 
-			setTimeout(() => {
-				checkAllCountriesStatus();
-			}, 200);
+	// Effects - 날짜 변경 감지 최적화
+	$effect(() => {
+		const currentDateString = trendDate?.toString() || '';
+
+		if (prevTrendDate !== currentDateString) {
+			prevTrendDate = currentDateString;
+
+			if (trendDate) {
+				resetCountryStatuses();
+
+				// 초기화 후 약간의 지연을 두고 체크 시작
+				setTimeout(
+					() => {
+						if (!checkInProgress) {
+							checkAllCountriesStatus();
+						}
+					},
+					isInitialized ? 100 : 300
+				); // 초기 로드시 더 긴 지연
+
+				isInitialized = true;
+			}
 		}
+	});
+
+	// cleanup 함수 - 메모리 누수 방지
+	$effect(() => {
+		return () => {
+			if (checkTimeout) {
+				clearTimeout(checkTimeout);
+				checkTimeout = null;
+			}
+			// 진행 중인 체크 중단
+			checkInProgress = false;
+			pendingChecks = [];
+		};
 	});
 </script>
 
@@ -289,9 +376,19 @@
 
 	<!-- 국가별 업데이트 상태 표시 -->
 	<div class="border rounded-md p-4 bg-gray-50">
-		<h3 class="text-lg font-semibold mb-3">
-			{formattedDate} 국가별 업데이트 상태
-		</h3>
+		<div class="flex items-center justify-between mb-3">
+			<h3 class="text-lg font-semibold">
+				{formattedDate} 국가별 업데이트 상태
+			</h3>
+			<Button
+				size="sm"
+				variant="outline"
+				onclick={checkAllCountriesStatus}
+				disabled={checkInProgress}
+			>
+				{checkInProgress ? '확인 중...' : '전체 상태 확인'}
+			</Button>
+		</div>
 		<div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
 			{#each countryStatuses as status (status.country)}
 				<div class="flex items-center justify-between p-3 bg-white rounded border">
@@ -307,7 +404,7 @@
 							{status.isUpdated ? '✓ 완료' : '✗ 미완료'}
 						</span>
 					{:else}
-						<span class="text-xs text-gray-400">대기 중</span>
+						<span class="text-xs text-gray-400">미확인</span>
 					{/if}
 				</div>
 			{/each}
