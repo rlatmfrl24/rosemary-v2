@@ -1,5 +1,4 @@
 import { onMount, onDestroy } from 'svelte';
-import type { EnhanceResult } from './types';
 
 /**
  * 실시간 시간 업데이트를 위한 커스텀 훅
@@ -59,7 +58,7 @@ export function useLoadingState() {
 export function createEnhanceHandler(setLoading: (loading: boolean) => void) {
 	return () => {
 		setLoading(true);
-		return async ({ update }: EnhanceResult) => {
+		return async ({ update }: { update: () => Promise<void> }) => {
 			try {
 				await update();
 			} finally {
@@ -78,7 +77,7 @@ export function createClearHistoryEnhanceHandler(
 ) {
 	return () => {
 		setLoading(true);
-		return async ({ update }: EnhanceResult) => {
+		return async ({ update }: { update: () => Promise<void> }) => {
 			try {
 				await update();
 				closeDialog();

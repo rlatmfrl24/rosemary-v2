@@ -17,3 +17,6 @@ export {
 
 // Actions
 export { handleCopyCodesClick, handleRowClick, handleKeyDown } from './actions';
+
+// Components
+export { ClearHistoryDialog, HitomiTable, ActionButtons } from './components';
