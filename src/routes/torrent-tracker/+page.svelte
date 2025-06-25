@@ -1,6 +1,6 @@
 <script lang="ts">
 	import Button from '@/lib/components/ui/button/button.svelte';
-	import { DateFormatter, getLocalTimeZone } from '@internationalized/date';
+	import { DateFormatter, getLocalTimeZone, type DateValue } from '@internationalized/date';
 	import { enhance } from '$app/forms';
 
 	// 모듈화된 imports
@@ -176,9 +176,13 @@
 	<!-- 국가별 업데이트 상태 표시 -->
 	<CountryStatusPanel
 		{formattedDate}
+		trendDate={state.trendDate}
 		countryStatuses={state.countryStatuses}
 		checkInProgress={state.checkInProgress}
 		onCheckAll={checkAllCountriesStatus}
+		onDateChange={(date: DateValue | undefined) => {
+			if (date) state.trendDate = date;
+		}}
 	/>
 
 	<!-- Control buttons -->
@@ -198,7 +202,6 @@
 		<!-- Input section -->
 		<InputSection
 			selectedCountry={state.selectedCountry}
-			trendDate={state.trendDate}
 			{formattedDate}
 			raw={state.raw}
 			isCheckingDB={state.isCheckingDB}
@@ -206,9 +209,6 @@
 			isDateCountryUpdated={state.isDateCountryUpdated}
 			onCountryChange={(country: Country) => {
 				state.selectedCountry = country;
-			}}
-			onDateChange={(date) => {
-				state.trendDate = date || state.trendDate;
 			}}
 			onRawChange={(value) => {
 				state.raw = value;

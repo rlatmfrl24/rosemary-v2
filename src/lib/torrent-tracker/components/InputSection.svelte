@@ -1,38 +1,28 @@
 <script lang="ts">
-	import Button from '$lib/components/ui/button/button.svelte';
 	import Textarea from '$lib/components/ui/textarea/textarea.svelte';
-	import * as Popover from '$lib/components/ui/popover';
 	import * as Select from '$lib/components/ui/select';
-	import { Calendar } from '$lib/components/ui/calendar';
-	import CalendarIcon from '@lucide/svelte/icons/calendar';
-	import { cn } from '$lib/utils.js';
-	import type { DateValue } from '@internationalized/date';
 	import type { Country } from '../types';
 	import { COUNTRIES } from '../types';
 
 	interface Props {
 		selectedCountry: Country;
-		trendDate: DateValue | undefined;
 		formattedDate: string;
 		raw: string;
 		isCheckingDB: boolean;
 		hasCheckedDB: boolean;
 		isDateCountryUpdated: boolean;
 		onCountryChange: (country: Country) => void;
-		onDateChange: (date: DateValue | undefined) => void;
 		onRawChange: (value: string) => void;
 	}
 
 	let {
 		selectedCountry,
-		trendDate,
 		formattedDate,
 		raw,
 		isCheckingDB,
 		hasCheckedDB,
 		isDateCountryUpdated,
 		onCountryChange,
-		onDateChange,
 		onRawChange
 	}: Props = $props();
 </script>
@@ -51,26 +41,10 @@
 		</Select.Content>
 	</Select.Root>
 
-	<Popover.Root>
-		<Popover.Trigger class="w-fit">
-			{#snippet child({ props })}
-				<Button
-					variant="outline"
-					class={cn(
-						'w-fit justify-start text-left font-normal',
-						!trendDate && 'text-muted-foreground'
-					)}
-					{...props}
-				>
-					<CalendarIcon class="size-4" />
-					{formattedDate}
-				</Button>
-			{/snippet}
-		</Popover.Trigger>
-		<Popover.Content class="w-auto p-0">
-			<Calendar value={trendDate} onValueChange={onDateChange} type="single" initialFocus />
-		</Popover.Content>
-	</Popover.Root>
+	<div class="flex items-center gap-2 px-3 py-2 border rounded-md bg-gray-50">
+		<span class="text-sm font-medium text-gray-700">선택된 날짜:</span>
+		<span class="text-sm font-medium text-gray-900">{formattedDate}</span>
+	</div>
 
 	<!-- Database status -->
 	<div class="flex items-center gap-2">
