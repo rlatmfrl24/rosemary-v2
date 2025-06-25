@@ -14,6 +14,7 @@ export class TorrentTrackerState {
 	);
 	raw = $state('');
 	isLoading = $state(false);
+	isDialogOpen = $state(false);
 	selectedCountry = $state<Country>('KR');
 
 	countryStatusMap = $state<Record<string, CountryStatus>>(

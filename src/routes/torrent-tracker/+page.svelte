@@ -13,6 +13,17 @@
 		type Country
 	} from '$lib/torrent-tracker';
 	import { CountryStatusPanel, TorrentTable, InputSection } from '$lib/torrent-tracker/components';
+	import {
+		AlertDialogTrigger,
+		AlertDialogContent,
+		AlertDialogHeader,
+		AlertDialogTitle,
+		AlertDialogDescription,
+		AlertDialogFooter,
+		AlertDialogCancel,
+		AlertDialogAction,
+		AlertDialog
+	} from '@/lib/components/ui/alert-dialog';
 
 	// 상태 관리
 	const state = new TorrentTrackerState();
@@ -74,6 +85,15 @@
 		return async ({ update }: { update: () => Promise<void> }) => {
 			await update();
 			state.isLoading = false;
+			state.isDialogOpen = false;
+
+			// DB 클리어 후 국가별 상태 재로딩
+			if (state.trendDate) {
+				state.resetCountryStatuses();
+				setTimeout(() => {
+					checkAllCountriesStatus();
+				}, 100);
+			}
 		};
 	};
 
@@ -179,12 +199,43 @@
 <div class="flex flex-col h-full p-4 gap-4">
 	<div class="flex items-center justify-between">
 		<h1 class="text-4xl font-bold">Torrent Tracker</h1>
-		<!-- Control buttons -->
-		<div class="flex items-center gap-2 flex-wrap">
-			<form method="post" action="?/clearDB" use:enhance={handleClearDB}>
-				<Button type="submit" disabled={state.isLoading}>Clear All DB</Button>
-			</form>
-		</div>
+
+		<AlertDialog bind:open={state.isDialogOpen}>
+			<AlertDialogTrigger>
+				<Button type="submit" name="action" value="clearDB" disabled={state.isLoading}>
+					Clear All DB
+				</Button>
+			</AlertDialogTrigger>
+
+			<AlertDialogContent>
+				<AlertDialogHeader>
+					<AlertDialogTitle>Are you sure?</AlertDialogTitle>
+					<AlertDialogDescription>This action cannot be undone.</AlertDialogDescription>
+				</AlertDialogHeader>
+				<AlertDialogFooter>
+					<AlertDialogCancel>Cancel</AlertDialogCancel>
+					<form method="post" action="?/clearDB" use:enhance={handleClearDB}>
+						<AlertDialogAction
+							type="submit"
+							name="action"
+							value="clearDB"
+							disabled={state.isLoading}
+						>
+							{#if state.isLoading}
+								<div class="flex items-center gap-2">
+									<div
+										class="animate-spin rounded-full border-2 border-gray-300 border-t-blue-600 h-4 w-4"
+									></div>
+									<span>Processing...</span>
+								</div>
+							{:else}
+								Confirm
+							{/if}
+						</AlertDialogAction>
+					</form>
+				</AlertDialogFooter>
+			</AlertDialogContent>
+		</AlertDialog>
 	</div>
 
 	<!-- 국가별 업데이트 상태 표시 -->
