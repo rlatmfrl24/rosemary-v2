@@ -2,6 +2,7 @@
 	import type { PageData } from './$types';
 	import * as Table from '$lib/components/ui/table';
 	import { Button } from '@/lib/components/ui/button';
+	import { ScrollArea } from '@/lib/components/ui/scroll-area';
 
 	export let data: PageData;
 
@@ -54,22 +55,22 @@
 				<Table.Root>
 					<Table.Header>
 						<Table.Row class="bg-gray-50">
-							<Table.Head class="w-12 text-center">순위</Table.Head>
-							<Table.Head class="min-w-[200px]">토렌트 이름</Table.Head>
-							<Table.Head class="w-32">최고 순위</Table.Head>
-							<Table.Head class="w-32">평균 순위</Table.Head>
-							<Table.Head class="w-40">순위 범위</Table.Head>
-							<Table.Head class="w-48">등장 국가</Table.Head>
-							<Table.Head class="w-56">등장 기간</Table.Head>
-							<Table.Head class="w-20 text-center">등장 횟수</Table.Head>
-							<Table.Head class="w-20 text-center">BTDig</Table.Head>
+							<Table.Head class="w-12 text-center font-bold">순위</Table.Head>
+							<Table.Head class="min-w-[200px] font-bold">토렌트 이름</Table.Head>
+							<Table.Head class="w-32 font-bold">최고 순위</Table.Head>
+							<Table.Head class="w-32 font-bold">평균 순위</Table.Head>
+							<Table.Head class="w-40 font-bold">순위 범위</Table.Head>
+							<Table.Head class="w-48 font-bold">등장 국가</Table.Head>
+							<Table.Head class="w-56 font-bold">등장 기간</Table.Head>
+							<Table.Head class="w-20 text-center font-bold">등장 횟수</Table.Head>
+							<Table.Head class="w-20 text-center font-bold">BTDig</Table.Head>
 						</Table.Row>
 					</Table.Header>
 				</Table.Root>
 			</div>
 
 			<!-- 스크롤 가능한 바디 -->
-			<div class="flex-1 overflow-auto">
+			<ScrollArea class="flex-1 overflow-auto">
 				<Table.Root>
 					<Table.Body>
 						{#each trendData as item, index}
@@ -77,10 +78,8 @@
 								<Table.Cell class="w-12 text-center font-medium">
 									{index + 1}
 								</Table.Cell>
-								<Table.Cell class="min-w-[200px] font-medium">
-									<div class="max-w-xs truncate" title={item.name}>
-										{item.name}
-									</div>
+								<Table.Cell class="min-w-[200px] font-medium max-w-0 truncate" title={item.name}>
+									{item.name}
 								</Table.Cell>
 								<Table.Cell class="w-32">
 									<span
@@ -134,7 +133,7 @@
 						{/each}
 					</Table.Body>
 				</Table.Root>
-			</div>
+			</ScrollArea>
 		</div>
 	{:else}
 		<div class="bg-white rounded-lg shadow p-8 text-center">
