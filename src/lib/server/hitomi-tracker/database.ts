@@ -38,12 +38,12 @@ export async function getLastCrawlTime(db: D1Database): Promise<number | string 
 		const result = historyItems.length > 0 ? historyItems[0].createdAt : null;
 
 		// 디버깅을 위한 로그 추가
-		console.log('getLastCrawlTime result:', {
-			hasHistoryItems: historyItems.length > 0,
-			result,
-			resultType: typeof result,
-			resultValue: result
-		});
+		// console.log('getLastCrawlTime result:', {
+		// 	hasHistoryItems: historyItems.length > 0,
+		// 	result,
+		// 	resultType: typeof result,
+		// 	resultValue: result
+		// });
 
 		return result;
 	} catch (error) {
