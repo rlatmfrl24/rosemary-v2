@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
+	import { dev } from '$app/environment';
 	import Button from '@/lib/components/ui/button/button.svelte';
 	import * as AlertDialog from '@/lib/components/ui/alert-dialog';
 	import type { HitomiItem } from '@/lib/hitomi-tracker';
@@ -54,7 +55,13 @@
 	<div class="flex items-center gap-2">
 		<form method="post" action="?/callCrawlApi" use:enhance={crawlEnhanceHandler}>
 			<Button type="submit" name="action" value="callCrawlApi" disabled={isLoading}>
-				Call crawl API
+				Call Fetch Crawl API
+			</Button>
+		</form>
+
+		<form method="post" action="?/callCrawlBrowserApi" use:enhance={crawlEnhanceHandler}>
+			<Button type="submit" name="action" value="callCrawlBrowserApi" disabled={isLoading || dev}>
+				Call Browser Crawl API
 			</Button>
 		</form>
 
