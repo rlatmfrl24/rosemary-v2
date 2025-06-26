@@ -35,7 +35,17 @@ export async function getLastCrawlTime(db: D1Database): Promise<number | string 
 			.orderBy(desc(hitomi_history.createdAt))
 			.limit(1);
 
-		return historyItems.length > 0 ? historyItems[0].createdAt : null;
+		const result = historyItems.length > 0 ? historyItems[0].createdAt : null;
+
+		// 디버깅을 위한 로그 추가
+		console.log('getLastCrawlTime result:', {
+			hasHistoryItems: historyItems.length > 0,
+			result,
+			resultType: typeof result,
+			resultValue: result
+		});
+
+		return result;
 	} catch (error) {
 		console.error('Failed to fetch last crawl time:', error);
 		return null;

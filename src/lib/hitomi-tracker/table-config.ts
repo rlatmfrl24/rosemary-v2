@@ -1,6 +1,8 @@
 import type { ColumnDef } from '@tanstack/table-core';
 import type { HitomiItem } from './types';
 import { formatCreatedAt } from './utils';
+import { renderComponent } from '$lib/components/ui/data-table/render-helpers';
+import TypeBadge from './components/TypeBadge.svelte';
 
 /**
  * Hitomi 트래커 테이블의 컬럼 정의
@@ -19,7 +21,13 @@ export const HITOMI_TABLE_COLUMNS: ColumnDef<HitomiItem>[] = [
 	{
 		header: 'Type',
 		accessorKey: 'type',
-		size: 40
+		size: 40,
+		cell: ({ row }) => {
+			const type = row.original.type;
+			return renderComponent(TypeBadge, {
+				type
+			});
+		}
 	},
 	{
 		header: 'URL',
