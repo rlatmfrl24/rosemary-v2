@@ -7,6 +7,7 @@
 	import type { DateValue } from '@internationalized/date';
 	import type { CountryStatus, Country } from '../types';
 	import { openCountryDaily } from '../utils';
+	import { buttonVariants } from '$lib/components/ui/button';
 
 	interface Props {
 		formattedDate: string;
@@ -48,21 +49,15 @@
 		<div class="flex items-center gap-3">
 			<h3 class="text-lg font-semibold">국가별 업데이트 상태</h3>
 			<Popover.Root>
-				<Popover.Trigger class="w-fit">
-					{#snippet child({ props })}
-						<Button
-							variant="outline"
-							size="sm"
-							class={cn(
-								'w-fit justify-start text-left font-normal',
-								!localTrendDate && 'text-muted-foreground'
-							)}
-							{...props}
-						>
-							<CalendarIcon class="size-4" />
-							{formattedDate}
-						</Button>
-					{/snippet}
+				<Popover.Trigger
+					class={cn(
+						buttonVariants({ variant: 'outline', size: 'sm' }),
+						'w-fit justify-start text-left font-normal',
+						!localTrendDate && 'text-muted-foreground'
+					)}
+				>
+					<CalendarIcon class="size-4" />
+					{formattedDate}
 				</Popover.Trigger>
 				<Popover.Content class="w-auto p-0">
 					<Calendar

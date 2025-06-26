@@ -1,5 +1,6 @@
 <script lang="ts">
 	import Button from '@/lib/components/ui/button/button.svelte';
+	import { buttonVariants } from '@/lib/components/ui/button';
 	import type { DateValue } from '@internationalized/date';
 	import { enhance, deserialize } from '$app/forms';
 	import ChevronLeftIcon from '@lucide/svelte/icons/chevron-left';
@@ -201,10 +202,14 @@
 		<h1 class="text-4xl font-bold">Torrent Tracker</h1>
 
 		<AlertDialog bind:open={state.isDialogOpen}>
-			<AlertDialogTrigger>
-				<Button type="submit" name="action" value="clearDB" disabled={state.isLoading}>
-					Clear All DB
-				</Button>
+			<AlertDialogTrigger
+				type="submit"
+				name="action"
+				value="clearDB"
+				disabled={state.isLoading}
+				class={buttonVariants()}
+			>
+				Clear All DB
 			</AlertDialogTrigger>
 
 			<AlertDialogContent>
