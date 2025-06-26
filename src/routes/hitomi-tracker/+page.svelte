@@ -7,7 +7,7 @@
 		useCurrentTime,
 		useLoadingState,
 		createEnhanceHandler,
-		createClearHistoryEnhanceHandler,
+		createCrawlEnhanceHandler,
 		handleCopyCodesClick,
 		ClearHistoryDialog,
 		HitomiTable,
@@ -27,13 +27,14 @@
 
 	// Enhance 핸들러들
 	const normalEnhanceHandler = createEnhanceHandler(loadingState.setLoading);
-	const clearHistoryEnhanceHandler = createClearHistoryEnhanceHandler(
-		loadingState.setClearHistoryLoading,
-		() => {} // Dialog 닫기는 ClearHistoryDialog 컴포넌트 내부에서 처리
+	const crawlEnhanceHandler = createCrawlEnhanceHandler(
+		loadingState.setLoading,
+		loadingState.setCrawlError
 	);
 
 	// 액션 핸들러들
 	const onCopyCodesClick = () => handleCopyCodesClick(data.new_item_list);
+	const onCrawlErrorDismiss = () => loadingState.clearCrawlError();
 </script>
 
 <div class="flex h-full flex-col gap-4 p-4">
@@ -49,14 +50,17 @@
 			<ActionButtons
 				items={data.new_item_list}
 				isLoading={loadingState.isLoading}
+				crawlError={loadingState.crawlError}
 				{onCopyCodesClick}
+				{onCrawlErrorDismiss}
 				{normalEnhanceHandler}
+				{crawlEnhanceHandler}
 			/>
 
 			<ClearHistoryDialog
 				isLoading={loadingState.isLoading}
 				isClearHistoryLoading={loadingState.isClearHistoryLoading}
-				{clearHistoryEnhanceHandler}
+				setClearHistoryLoading={loadingState.setClearHistoryLoading}
 			/>
 		</div>
 	</div>

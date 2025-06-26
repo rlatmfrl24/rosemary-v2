@@ -35,6 +35,7 @@ export function useCurrentTime(intervalMs: number = 60000) {
 export function useLoadingState() {
 	let isLoading = $state(false);
 	let isClearHistoryLoading = $state(false);
+	let crawlError = $state<string | null>(null);
 
 	return {
 		get isLoading() {
@@ -43,11 +44,20 @@ export function useLoadingState() {
 		get isClearHistoryLoading() {
 			return isClearHistoryLoading;
 		},
+		get crawlError() {
+			return crawlError;
+		},
 		setLoading(loading: boolean) {
 			isLoading = loading;
 		},
 		setClearHistoryLoading(loading: boolean) {
 			isClearHistoryLoading = loading;
+		},
+		setCrawlError(error: string | null) {
+			crawlError = error;
+		},
+		clearCrawlError() {
+			crawlError = null;
 		}
 	};
 }
@@ -69,18 +79,38 @@ export function createEnhanceHandler(setLoading: (loading: boolean) => void) {
 }
 
 /**
- * Clear history 전용 enhance 핸들러 생성 함수
+ * 크롤링 전용 enhance 핸들러 생성 함수
  */
-export function createClearHistoryEnhanceHandler(
+export function createCrawlEnhanceHandler(
 	setLoading: (loading: boolean) => void,
-	closeDialog: () => void
+	setCrawlError: (error: string | null) => void
 ) {
 	return () => {
 		setLoading(true);
-		return async ({ update }: { update: () => Promise<void> }) => {
+		setCrawlError(null); // 새로운 요청 시 이전 에러 클리어
+
+		return async ({
+			result,
+			update
+		}: {
+			result: {
+				type: string;
+				data?: {
+					success?: boolean;
+					error?: string;
+				};
+			};
+			update: () => Promise<void>;
+		}) => {
 			try {
 				await update();
-				closeDialog();
+
+				// 폼 액션 결과 확인
+				if (result.type === 'success' && result.data) {
+					if (!result.data.success && result.data.error) {
+						setCrawlError(result.data.error);
+					}
+				}
 			} finally {
 				setLoading(false);
 			}

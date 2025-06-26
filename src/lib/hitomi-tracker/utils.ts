@@ -1,44 +1,59 @@
 /**
  * Unix timestamp를 Date 객체로 변환하는 유틸리티 함수
- * @param timestamp - Unix 타임스탬프 (초 단위) 또는 문자열
+ * @param timestamp - Unix 타임스탬프 (초 단위) 또는 문자열 또는 날짜 문자열
  * @returns Date 객체 또는 null (유효하지 않은 경우)
  */
 export function parseTimestamp(timestamp: number | string | null): Date | null {
 	if (!timestamp && timestamp !== 0) return null;
 
-	let numericTimestamp: number;
+	let date: Date;
 
 	if (typeof timestamp === 'number') {
-		numericTimestamp = timestamp;
+		// 숫자인 경우 Unix timestamp로 처리
+		if (timestamp === 0) return null;
+
+		// timestamp가 너무 작거나 크면 무효한 것으로 간주
+		const minTimestamp = 315532800; // 1980-01-01 00:00:00 UTC
+		const maxTimestamp = 2524608000; // 2050-01-01 00:00:00 UTC
+
+		if (timestamp < minTimestamp || timestamp > maxTimestamp) {
+			// 밀리초 단위로 저장된 경우를 고려해서 1000으로 나누어 확인
+			const timestampInSeconds = Math.floor(timestamp / 1000);
+			if (timestampInSeconds >= minTimestamp && timestampInSeconds <= maxTimestamp) {
+				// 이미 밀리초 단위인 경우
+				date = new Date(timestamp);
+			} else {
+				return null;
+			}
+		} else {
+			// 초 단위 timestamp를 밀리초로 변환
+			date = new Date(timestamp * 1000);
+		}
 	} else if (typeof timestamp === 'string') {
-		const parsed = parseInt(timestamp, 10);
-		if (isNaN(parsed)) return null;
-		numericTimestamp = parsed;
+		// 문자열인 경우
+
+		// 1. 먼저 숫자 형태의 문자열인지 확인 (Unix timestamp)
+		const numericTimestamp = parseInt(timestamp, 10);
+		if (!isNaN(numericTimestamp) && timestamp.match(/^\d+$/)) {
+			// 순수 숫자 문자열인 경우 재귀 호출
+			return parseTimestamp(numericTimestamp);
+		}
+
+		// 2. 날짜 문자열 형태인지 확인 ('YYYY-MM-DD HH:mm:ss' 형태)
+		if (timestamp.match(/^\d{4}-\d{2}-\d{2}(\s\d{2}:\d{2}:\d{2})?$/)) {
+			// ISO 형태로 변환하여 파싱
+			const isoString = timestamp.includes(' ')
+				? timestamp.replace(' ', 'T') + 'Z' // UTC로 처리
+				: timestamp + 'T00:00:00Z';
+
+			date = new Date(isoString);
+		} else {
+			// 3. 일반적인 날짜 문자열로 파싱 시도
+			date = new Date(timestamp);
+		}
 	} else {
 		return null;
 	}
-
-	// timestamp가 0이면 null 반환 (1970-01-01 방지)
-	if (numericTimestamp === 0) return null;
-
-	// timestamp가 너무 작거나 크면 무효한 것으로 간주
-	// 1980년 이전이거나 2050년 이후면 무효한 것으로 간주
-	const minTimestamp = 315532800; // 1980-01-01 00:00:00 UTC
-	const maxTimestamp = 2524608000; // 2050-01-01 00:00:00 UTC
-
-	if (numericTimestamp < minTimestamp || numericTimestamp > maxTimestamp) {
-		// 밀리초 단위로 저장된 경우를 고려해서 1000으로 나누어 확인
-		const timestampInSeconds = Math.floor(numericTimestamp / 1000);
-		if (timestampInSeconds >= minTimestamp && timestampInSeconds <= maxTimestamp) {
-			// 이미 밀리초 단위인 경우
-			const date = new Date(numericTimestamp);
-			return isNaN(date.getTime()) ? null : date;
-		}
-		return null;
-	}
-
-	// 초 단위 timestamp를 밀리초로 변환
-	const date = new Date(numericTimestamp * 1000);
 
 	// 유효한 날짜인지 확인
 	return isNaN(date.getTime()) ? null : date;

@@ -16,16 +16,26 @@
 	interface Props {
 		isLoading: boolean;
 		isClearHistoryLoading: boolean;
-		clearHistoryEnhanceHandler: () => ({
-			update
-		}: {
-			update: () => Promise<void>;
-		}) => Promise<void>;
+		setClearHistoryLoading: (loading: boolean) => void;
 	}
 
-	const { isLoading, isClearHistoryLoading, clearHistoryEnhanceHandler }: Props = $props();
+	const { isLoading, isClearHistoryLoading, setClearHistoryLoading }: Props = $props();
 
 	let isDialogOpen = $state(false);
+
+	// 내부에서 enhance handler 생성
+	const enhanceHandler = () => {
+		setClearHistoryLoading(true);
+		return async ({ update }: { update: () => Promise<void> }) => {
+			try {
+				await update();
+				// 성공적으로 완료되면 dialog 닫기
+				isDialogOpen = false;
+			} finally {
+				setClearHistoryLoading(false);
+			}
+		};
+	};
 </script>
 
 <AlertDialog bind:open={isDialogOpen}>
@@ -45,7 +55,7 @@
 		</AlertDialogHeader>
 		<AlertDialogFooter>
 			<AlertDialogCancel>Cancel</AlertDialogCancel>
-			<form method="post" action="?/clearHistory" use:enhance={clearHistoryEnhanceHandler}>
+			<form method="post" action="?/clearHistory" use:enhance={enhanceHandler}>
 				<AlertDialogAction
 					type="submit"
 					name="action"

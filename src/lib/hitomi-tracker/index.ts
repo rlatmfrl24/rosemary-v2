@@ -12,7 +12,7 @@ export {
 	useCurrentTime,
 	useLoadingState,
 	createEnhanceHandler,
-	createClearHistoryEnhanceHandler
+	createCrawlEnhanceHandler
 } from './hooks.svelte';
 
 // Actions
