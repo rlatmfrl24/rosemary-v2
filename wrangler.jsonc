@@ -35,10 +35,6 @@
 			"migrations_dir": "migrations"
 		}
 	],
-	"browser": {
-		"binding": "BROWSER"
-	},
-
 	/**
 	 * Environment Variables
 	 * https://developers.cloudflare.com/workers/wrangler/configuration/#environment-variables

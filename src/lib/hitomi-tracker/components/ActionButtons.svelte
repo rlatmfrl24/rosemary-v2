@@ -54,7 +54,13 @@
 	<div class="flex items-center gap-2">
 		<form method="post" action="?/callCrawlApi" use:enhance={crawlEnhanceHandler}>
 			<Button type="submit" name="action" value="callCrawlApi" disabled={isLoading}>
-				Call crawl API
+				Call Fetch Crawl API
+			</Button>
+		</form>
+
+		<form method="post" action="?/callCrawlBrowserApi" use:enhance={crawlEnhanceHandler}>
+			<Button type="submit" name="action" value="callCrawlBrowserApi" disabled={isLoading}>
+				Call Browser Crawl API
 			</Button>
 		</form>
 
