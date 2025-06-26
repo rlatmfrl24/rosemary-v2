@@ -27,6 +27,47 @@ interface CrawlItem {
 	url: string;
 }
 
+// 로그 유틸리티 함수
+function logWithTimestamp(message: string, level: 'INFO' | 'WARN' | 'ERROR' = 'INFO') {
+	const timestamp = new Date().toISOString();
+	console.log(`[${timestamp}] [${level}] ${message}`);
+}
+
+function logRequest(url: string, attempt: number, maxRetries: number) {
+	logWithTimestamp(`HTTP 요청 시작 - URL: ${url} (시도: ${attempt}/${maxRetries})`);
+}
+
+function logResponse(url: string, status: number, statusText: string, responseSize?: number) {
+	const sizeInfo = responseSize ? ` (크기: ${responseSize} bytes)` : '';
+	logWithTimestamp(`HTTP 응답 - URL: ${url}, 상태: ${status} ${statusText}${sizeInfo}`);
+}
+
+function logError(context: string, error: unknown, additionalInfo?: Record<string, unknown>) {
+	const errorMessage = error instanceof Error ? error.message : String(error);
+	const stack = error instanceof Error ? error.stack : undefined;
+
+	logWithTimestamp(`${context} - 에러: ${errorMessage}`, 'ERROR');
+
+	if (additionalInfo) {
+		logWithTimestamp(`추가 정보: ${JSON.stringify(additionalInfo)}`, 'ERROR');
+	}
+
+	if (stack) {
+		logWithTimestamp(`스택 트레이스: ${stack}`, 'ERROR');
+	}
+}
+
+// 환경 정보 로깅
+function logEnvironmentInfo(context: { platform?: { env?: { DB?: D1Database } } }) {
+	logWithTimestamp('=== 환경 정보 ===');
+	logWithTimestamp(`플랫폼 환경: ${context.platform ? '사용 가능' : '사용 불가'}`);
+	logWithTimestamp(`D1 데이터베이스: ${context.platform?.env?.DB ? '연결됨' : '연결 안됨'}`);
+	logWithTimestamp(`User-Agent: ${USER_AGENT}`);
+	logWithTimestamp(`크롤링 대상 URL: ${CRAWL_CONFIG.BASE_URL}`);
+	logWithTimestamp(`검색 매개변수: ${CRAWL_CONFIG.SEARCH_PARAMS}`);
+	logWithTimestamp('==================');
+}
+
 // 유틸리티 함수: 지연 시간 추가
 const delay = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -37,36 +78,85 @@ async function fetchWithRetry(
 ): Promise<Response> {
 	let lastError: unknown;
 
+	logWithTimestamp(`요청 시작 - 대상: ${url}, 최대 재시도: ${maxRetries}`);
+
 	for (let attempt = 1; attempt <= maxRetries; attempt++) {
 		try {
+			logRequest(url, attempt, maxRetries);
+
+			const startTime = Date.now();
 			const response = await fetch(url, {
-				headers: { 'User-Agent': USER_AGENT }
+				headers: {
+					'User-Agent': USER_AGENT,
+					Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+					'Accept-Language': 'ko-KR,ko;q=0.9,en;q=0.8',
+					'Accept-Encoding': 'gzip, deflate, br',
+					DNT: '1',
+					Connection: 'keep-alive',
+					'Upgrade-Insecure-Requests': '1'
+				}
 			});
 
+			const responseTime = Date.now() - startTime;
+			const contentLength = response.headers.get('content-length');
+			const responseSize = contentLength ? parseInt(contentLength) : undefined;
+
+			logResponse(url, response.status, response.statusText, responseSize);
+			logWithTimestamp(`응답 시간: ${responseTime}ms`);
+
+			// 응답 헤더 로깅
+			logWithTimestamp('=== 응답 헤더 ===');
+			response.headers.forEach((value, key) => {
+				logWithTimestamp(`${key}: ${value}`);
+			});
+			logWithTimestamp('==================');
+
 			if (response.ok) {
+				logWithTimestamp(`요청 성공 - ${attempt}번째 시도에서 성공`);
 				return response;
 			}
+
+			// 클라이언트 에러 (4xx) vs 서버 에러 (5xx) 구분
+			const errorType =
+				response.status >= 400 && response.status < 500 ? '클라이언트 에러' : '서버 에러';
+			logError(`HTTP ${errorType}`, new Error(`${response.status} ${response.statusText}`), {
+				url,
+				attempt,
+				maxRetries,
+				responseHeaders: Object.fromEntries(response.headers.entries())
+			});
 
 			throw new Error(`HTTP 오류: ${response.status} ${response.statusText}`);
 		} catch (error) {
 			lastError = error;
 
+			// 네트워크 레벨 에러 vs HTTP 에러 구분
+			const errorType = error instanceof TypeError ? '네트워크 에러' : 'HTTP 에러';
+			logError(`${errorType} (시도 ${attempt}/${maxRetries})`, error, {
+				url,
+				attempt,
+				maxRetries,
+				willRetry: attempt < maxRetries
+			});
+
 			// 마지막 시도가 아니면 대기 후 재시도
 			if (attempt < maxRetries) {
 				const delayTime = CRAWL_CONFIG.RETRY_DELAY_MS * attempt;
-				console.log(`요청 실패, ${delayTime}ms 후 재시도... (${attempt}/${maxRetries})`);
+				logWithTimestamp(`${delayTime}ms 후 재시도... (${attempt}/${maxRetries})`);
 				await delay(delayTime);
 			}
 		}
 	}
 
+	logError('모든 재시도 실패', lastError, { url, maxRetries });
 	throw lastError;
 }
 
 // 데이터베이스에서 히스토리 조회
 async function getHitomiHistory(db: ReturnType<typeof drizzle>): Promise<Set<string>> {
 	try {
-		console.log('히토미 히스토리 조회 중...');
+		logWithTimestamp('히토미 히스토리 조회 중...');
+		const startTime = Date.now();
 
 		const history = await db
 			.select({ code: hitomi_history.code })
@@ -74,12 +164,14 @@ async function getHitomiHistory(db: ReturnType<typeof drizzle>): Promise<Set<str
 			.orderBy(desc(hitomi_history.createdAt))
 			.limit(CRAWL_CONFIG.HISTORY_LIMIT);
 
+		const queryTime = Date.now() - startTime;
 		const historySet = new Set(history.map((item) => item.code));
-		console.log(`히스토리 ${historySet.size}개 항목 로드 완료`);
+
+		logWithTimestamp(`히스토리 조회 완료 - ${historySet.size}개 항목, 조회 시간: ${queryTime}ms`);
 
 		return historySet;
 	} catch (error) {
-		console.error('히토미 히스토리 조회 실패:', error);
+		logError('히토미 히스토리 조회 실패', error);
 		throw new Error('데이터베이스 조회 실패');
 	}
 }
@@ -87,41 +179,88 @@ async function getHitomiHistory(db: ReturnType<typeof drizzle>): Promise<Set<str
 // URL 생성 함수
 function buildCrawlUrl(pageIndex: number, cursor?: string): string {
 	const baseUrl = `${CRAWL_CONFIG.BASE_URL}/?${CRAWL_CONFIG.SEARCH_PARAMS}`;
-	return pageIndex === 0 ? baseUrl : `${baseUrl}&next=${cursor}`;
+	const finalUrl = pageIndex === 0 ? baseUrl : `${baseUrl}&next=${cursor}`;
+
+	logWithTimestamp(`페이지 ${pageIndex + 1} URL 생성: ${finalUrl}`);
+	return finalUrl;
 }
 
 // 페이지에서 아이템 추출
 function extractItemsFromPage($: cheerio.CheerioAPI, historySet: Set<string>): CrawlItem[] {
 	const items: CrawlItem[] = [];
 
-	$('table tbody tr').each((index, element) => {
+	logWithTimestamp('페이지에서 아이템 추출 시작');
+
+	// DOM 구조 확인을 위한 로깅
+	const tableRows = $('table tbody tr');
+	logWithTimestamp(`찾은 테이블 행 수: ${tableRows.length}`);
+
+	if (tableRows.length === 0) {
+		logWithTimestamp('테이블 행을 찾을 수 없음. 페이지 구조가 변경되었을 가능성', 'WARN');
+
+		// 페이지 내용 일부 로깅 (디버깅용)
+		const pageTitle = $('title').text();
+		const bodyText = $('body').text().substring(0, 500);
+		logWithTimestamp(`페이지 제목: ${pageTitle}`);
+		logWithTimestamp(`페이지 내용 (첫 500자): ${bodyText}`);
+	}
+
+	tableRows.each((index, element) => {
 		try {
 			// 첫 두 행은 헤더이므로 건너뜀
 			if (index <= 1) return;
 
-			const category = $(element).find('.gl1c.glcat').text().trim();
-			if (!category) return;
+			const categoryElement = $(element).find('.gl1c.glcat');
+			const category = categoryElement.text().trim();
+
+			if (!category) {
+				logWithTimestamp(`행 ${index}: 카테고리를 찾을 수 없음`, 'WARN');
+				return;
+			}
 
 			const itemElement = $(element).find('.gl3c.glname');
-			const link = itemElement.find('a').attr('href');
-			const name = itemElement.find('.glink').text().trim();
+			const linkElement = itemElement.find('a');
+			const nameElement = itemElement.find('.glink');
 
-			if (!link || !name) return;
+			const link = linkElement.attr('href');
+			const name = nameElement.text().trim();
+
+			if (!link || !name) {
+				logWithTimestamp(
+					`행 ${index}: 링크 또는 이름을 찾을 수 없음 - 링크: ${!!link}, 이름: ${!!name}`,
+					'WARN'
+				);
+				return;
+			}
 
 			const code = link.split('/').reverse()[2];
-			if (!code || historySet.has(code)) return;
+			if (!code) {
+				logWithTimestamp(`행 ${index}: 코드 추출 실패 - 링크: ${link}`, 'WARN');
+				return;
+			}
 
-			items.push({
+			if (historySet.has(code)) {
+				logWithTimestamp(`행 ${index}: 이미 히스토리에 존재하는 코드: ${code}`);
+				return;
+			}
+
+			const item: CrawlItem = {
 				code,
 				name,
 				type: category,
 				url: link
-			});
+			};
+
+			items.push(item);
+			logWithTimestamp(
+				`행 ${index}: 아이템 추가 - 코드: ${code}, 이름: ${name.substring(0, 50)}...`
+			);
 		} catch (error) {
-			console.error(`항목 처리 중 오류 (인덱스 ${index}):`, error);
+			logError(`아이템 처리 중 오류 (행 ${index})`, error);
 		}
 	});
 
+	logWithTimestamp(`페이지에서 ${items.length}개 아이템 추출 완료`);
 	return items;
 }
 
@@ -132,22 +271,31 @@ async function crawlSinglePage(
 	historySet: Set<string>
 ): Promise<{ items: CrawlItem[]; nextCursor?: string }> {
 	try {
-		console.log(`\n페이지 ${pageIndex + 1} 크롤링 중...`);
+		logWithTimestamp(`=== 페이지 ${pageIndex + 1} 크롤링 시작 ===`);
 
 		const url = buildCrawlUrl(pageIndex, cursor);
 		const response = await fetchWithRetry(url);
+
+		logWithTimestamp('HTML 응답 파싱 시작');
 		const html = await response.text();
+		logWithTimestamp(`HTML 크기: ${html.length} 문자`);
+
+		// HTML 내용 일부 로깅 (디버깅용)
+		const htmlPreview = html.substring(0, 1000).replace(/\n/g, ' ');
+		logWithTimestamp(`HTML 미리보기 (첫 1000자): ${htmlPreview}`);
+
 		const $ = cheerio.load(html);
 
 		const items = extractItemsFromPage($, historySet);
-		console.log(`페이지 ${pageIndex + 1}에서 ${items.length}개의 새로운 항목 발견`);
+		logWithTimestamp(`페이지 ${pageIndex + 1} 크롤링 완료 - ${items.length}개 새로운 항목`);
 
 		// 다음 페이지 커서 설정
 		const nextCursor = items.length > 0 ? items[items.length - 1].code : undefined;
+		logWithTimestamp(`다음 페이지 커서: ${nextCursor || '없음'}`);
 
 		return { items, nextCursor };
 	} catch (error) {
-		console.error(`페이지 ${pageIndex + 1} 크롤링 실패:`, error);
+		logError(`페이지 ${pageIndex + 1} 크롤링 실패`, error, { pageIndex, cursor });
 		return { items: [] };
 	}
 }
@@ -157,18 +305,23 @@ async function crawlAllPages(historySet: Set<string>): Promise<CrawlItem[]> {
 	const allItems: CrawlItem[] = [];
 	let cursor: string | undefined;
 
+	logWithTimestamp(`=== 전체 크롤링 시작 (최대 ${CRAWL_CONFIG.MAX_PAGES}페이지) ===`);
+
 	for (let pageIndex = 0; pageIndex < CRAWL_CONFIG.MAX_PAGES; pageIndex++) {
 		const { items, nextCursor } = await crawlSinglePage(pageIndex, cursor, historySet);
 
 		if (items.length === 0) {
-			console.log('더 이상 새로운 항목이 없어 크롤링을 종료합니다.');
+			logWithTimestamp(`페이지 ${pageIndex + 1}에서 새로운 항목이 없어 크롤링 종료`);
 			break;
 		}
 
 		allItems.push(...items);
 		cursor = nextCursor;
+
+		logWithTimestamp(`현재까지 수집된 총 항목 수: ${allItems.length}`);
 	}
 
+	logWithTimestamp(`전체 크롤링 완료 - 총 ${allItems.length}개 항목 수집`);
 	return allItems;
 }
 
@@ -177,7 +330,10 @@ async function saveItemsToDatabase(
 	db: ReturnType<typeof drizzle>,
 	items: CrawlItem[]
 ): Promise<{ savedCount: number; failedCount: number; failedItems: CrawlItem[] }> {
-	if (items.length === 0) return { savedCount: 0, failedCount: 0, failedItems: [] };
+	if (items.length === 0) {
+		logWithTimestamp('저장할 아이템이 없음');
+		return { savedCount: 0, failedCount: 0, failedItems: [] };
+	}
 
 	// SQLite 변수 제한을 피하기 위해 청크 크기 설정 (각 아이템당 4개 필드이므로 50개씩 처리)
 	const CHUNK_SIZE = 50; // 더 작은 청크로 안정성 향상
@@ -187,7 +343,8 @@ async function saveItemsToDatabase(
 	let failedCount = 0;
 	const failedItems: CrawlItem[] = [];
 
-	console.log(`데이터베이스에 ${items.length}개 항목 저장 중...`);
+	logWithTimestamp(`=== 데이터베이스 저장 시작 ===`);
+	logWithTimestamp(`총 ${items.length}개 항목을 ${totalChunks}개 청크로 분할하여 저장`);
 
 	// 청크 단위로 처리
 	for (let i = 0; i < totalChunks; i++) {
@@ -195,15 +352,26 @@ async function saveItemsToDatabase(
 		const end = Math.min(start + CHUNK_SIZE, items.length);
 		const chunk = items.slice(start, end);
 
+		logWithTimestamp(`청크 ${i + 1}/${totalChunks} 저장 중... (${chunk.length}개 항목)`);
+
 		try {
+			const saveStartTime = Date.now();
+
 			// new_item_list에 저장
 			await db.insert(new_item_list).values(chunk);
 			// hitomi_history에 저장
 			await db.insert(hitomi_history).values(chunk);
 
+			const saveTime = Date.now() - saveStartTime;
 			savedCount += chunk.length;
-		} catch {
-			console.error(`청크 ${i + 1} 저장 실패, 개별 재시도 중...`);
+
+			logWithTimestamp(
+				`청크 ${i + 1} 저장 성공 - ${chunk.length}개 항목, 저장 시간: ${saveTime}ms`
+			);
+		} catch (error) {
+			logError(`청크 ${i + 1} 저장 실패`, error, { chunkSize: chunk.length, chunkIndex: i });
+			logWithTimestamp(`청크 ${i + 1} 개별 재시도 시작...`);
+
 			failedCount += chunk.length;
 			failedItems.push(...chunk);
 
@@ -222,11 +390,13 @@ async function saveItemsToDatabase(
 					if (itemIndex !== -1) {
 						failedItems.splice(itemIndex, 1);
 					}
-				} catch {
-					console.error(`개별 아이템 저장 실패 (코드: ${item.code})`);
+				} catch (individualError) {
+					logError(`개별 아이템 저장 실패`, individualError, { code: item.code, name: item.name });
 				}
 			}
-			console.log(`청크 ${i + 1} 재시도 완료: ${individualSavedCount}/${chunk.length}개 성공`);
+			logWithTimestamp(
+				`청크 ${i + 1} 개별 재시도 완료: ${individualSavedCount}/${chunk.length}개 성공`
+			);
 		}
 
 		// 각 청크 처리 후 짧은 대기 (DB 부하 방지)
@@ -235,12 +405,14 @@ async function saveItemsToDatabase(
 		}
 	}
 
-	console.log(
-		`데이터베이스 저장 완료: ${savedCount}개 성공${failedCount > 0 ? `, ${failedCount}개 실패` : ''}`
-	);
+	logWithTimestamp(`=== 데이터베이스 저장 완료 ===`);
+	logWithTimestamp(`저장 결과: ${savedCount}개 성공, ${failedCount}개 실패`);
 
 	if (failedItems.length > 0) {
-		console.log(`저장 실패한 아이템: ${failedItems.length}개`);
+		logWithTimestamp(`저장 실패 아이템 목록:`, 'WARN');
+		failedItems.forEach((item) => {
+			logWithTimestamp(`- 코드: ${item.code}, 이름: ${item.name}`, 'WARN');
+		});
 	}
 
 	return { savedCount, failedCount, failedItems };
@@ -248,8 +420,14 @@ async function saveItemsToDatabase(
 
 // 메인 GET 핸들러
 export async function GET(context): Promise<Response> {
+	const startTime = Date.now();
+
 	try {
-		console.log('크롤링 시작...');
+		logWithTimestamp('=== 크롤링 프로세스 시작 ===');
+
+		// 환경 정보 로깅
+		logEnvironmentInfo(context);
+
 		const db = drizzle(context.platform?.env.DB as D1Database);
 
 		// 1. 히스토리 조회
@@ -261,26 +439,39 @@ export async function GET(context): Promise<Response> {
 		// 3. 데이터베이스에 저장
 		const saveResult = await saveItemsToDatabase(db, itemList);
 
-		console.log(`크롤링 완료! 총 ${itemList.length}개의 새로운 항목 발견`);
-		console.log(`저장 결과: ${saveResult.savedCount}개 성공, ${saveResult.failedCount}개 실패`);
+		const totalTime = Date.now() - startTime;
+
+		logWithTimestamp('=== 크롤링 프로세스 완료 ===');
+		logWithTimestamp(`총 실행 시간: ${totalTime}ms`);
+		logWithTimestamp(`수집된 항목: ${itemList.length}개`);
+		logWithTimestamp(`저장 성공: ${saveResult.savedCount}개`);
+		logWithTimestamp(`저장 실패: ${saveResult.failedCount}개`);
 
 		return json({
 			success: true,
 			crawledCount: itemList.length,
 			savedCount: saveResult.savedCount,
 			failedCount: saveResult.failedCount,
+			executionTime: totalTime,
 			itemList,
 			failedItems: saveResult.failedItems,
 			message: `크롤링이 완료되었습니다. ${itemList.length}개 수집, ${saveResult.savedCount}개 저장 성공, ${saveResult.failedCount}개 저장 실패`
 		});
 	} catch (error) {
-		console.error('크롤링 중 치명적인 오류:', error);
+		const totalTime = Date.now() - startTime;
+
+		logError('크롤링 중 치명적인 오류', error, {
+			executionTime: totalTime,
+			platform: !!context.platform,
+			database: !!context.platform?.env?.DB
+		});
 
 		return json(
 			{
 				success: false,
 				error: '크롤링 중 오류가 발생했습니다.',
-				details: error instanceof Error ? error.message : '알 수 없는 오류'
+				details: error instanceof Error ? error.message : '알 수 없는 오류',
+				executionTime: totalTime
 			},
 			{ status: 500 }
 		);
