@@ -1,6 +1,5 @@
 import { json, error } from '@sveltejs/kit';
 import { dev } from '$app/environment';
-import { CLOUDFLARE_BROWSER_RENDERING_TOKEN, CLOUDFLARE_ACCOUNT_ID } from '$env/static/private';
 import Cloudflare from 'cloudflare';
 import * as cheerio from 'cheerio';
 import { drizzle } from 'drizzle-orm/d1';
@@ -332,52 +331,49 @@ async function crawlAllPages(
 }
 
 export const GET: RequestHandler = async ({ platform }) => {
+	// 로컬 환경에서는 크롤링을 수행하지 않음
+	if (dev) {
+		logWithTimestamp('로컬 환경에서는 Browser Rendering 크롤링이 비활성화되어 있습니다.');
+		return json({
+			success: false,
+			message: '로컬 환경에서는 Browser Rendering 크롤링이 지원되지 않습니다.',
+			crawledCount: 0,
+			savedCount: 0,
+			failedCount: 0,
+			executionTime: 0,
+			itemList: [],
+			failedItems: []
+		});
+	}
+
 	const startTime = Date.now();
 
-	// 로컬 환경과 프로덕션 환경에 따른 환경변수 처리
-	let token: string | null = null;
-	let accountId: string | null = null;
-	const db = drizzle(platform?.env.DB as D1Database);
+	// 프로덕션 환경: Cloudflare Workers 환경
+	logWithTimestamp('프로덕션 환경에서 실행 중...');
 
-	if (dev) {
-		// 로컬 환경: .env.local 파일에서 환경변수 가져오기
-		logWithTimestamp('로컬 개발 환경에서 실행 중...');
-
-		token = CLOUDFLARE_BROWSER_RENDERING_TOKEN;
-		accountId = CLOUDFLARE_ACCOUNT_ID;
-
-		if (!token || !accountId) {
-			return error(
-				500,
-				'.env.local 파일에 CLOUDFLARE_BROWSER_RENDERING_TOKEN 및 CLOUDFLARE_ACCOUNT_ID 환경 변수가 설정되지 않았습니다.'
-			);
-		}
-	} else {
-		// 프로덕션 환경: Cloudflare Workers 환경
-		logWithTimestamp('프로덕션 환경에서 실행 중...');
-
-		if (!platform?.env) {
-			return error(500, '환경 변수에 접근할 수 없습니다.');
-		}
-
-		const {
-			SECRET_BROWSER_RENDERING_TOKEN: secretToken,
-			SECRET_CLOUDFLARE_ACCOUNT_ID: secretAccountId,
-			DB: database
-		} = platform.env;
-
-		if (!secretToken || !secretAccountId) {
-			return error(500, 'Cloudflare 환경 변수가 설정되지 않았습니다.');
-		}
-
-		if (!database) {
-			return error(500, '데이터베이스 환경 변수가 설정되지 않았습니다.');
-		}
-
-		// Cloudflare Workers KV에서 실제 값 가져오기
-		token = await secretToken.get('CLOUDFLARE_BROWSER_RENDERING_TOKEN');
-		accountId = await secretAccountId.get('CLOUDFLARE_ACCOUNT_ID');
+	if (!platform?.env) {
+		return error(500, '환경 변수에 접근할 수 없습니다.');
 	}
+
+	const {
+		SECRET_BROWSER_RENDERING_TOKEN: secretToken,
+		SECRET_CLOUDFLARE_ACCOUNT_ID: secretAccountId,
+		DB: database
+	} = platform.env;
+
+	if (!secretToken || !secretAccountId) {
+		return error(500, 'Cloudflare 환경 변수가 설정되지 않았습니다.');
+	}
+
+	if (!database) {
+		return error(500, '데이터베이스 환경 변수가 설정되지 않았습니다.');
+	}
+
+	const db = drizzle(database);
+
+	// Cloudflare Workers KV에서 실제 값 가져오기
+	const token = await secretToken.get('CLOUDFLARE_BROWSER_RENDERING_TOKEN');
+	const accountId = await secretAccountId.get('CLOUDFLARE_ACCOUNT_ID');
 
 	if (!token || !accountId) {
 		return error(500, 'Cloudflare API 토큰 또는 계정 ID를 가져올 수 없습니다.');
@@ -391,13 +387,13 @@ export const GET: RequestHandler = async ({ platform }) => {
 		});
 
 		// 1. 히스토리 조회
-		const historySet = await getHitomiHistory(db!);
+		const historySet = await getHitomiHistory(db);
 
 		// 2. 모든 페이지 크롤링 (Browser Rendering 사용)
 		const itemList = await crawlAllPages(client, accountId ?? '', historySet);
 
 		// 3. 데이터베이스에 저장
-		const saveResult = await saveItemsToDatabase(db!, itemList);
+		const saveResult = await saveItemsToDatabase(db, itemList);
 
 		const totalTime = Date.now() - startTime;
 
