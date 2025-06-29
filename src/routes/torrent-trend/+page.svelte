@@ -3,10 +3,32 @@
 	import * as Table from '$lib/components/ui/table';
 	import { Button } from '@/lib/components/ui/button';
 	import { ScrollArea } from '@/lib/components/ui/scroll-area';
+	import { enhance } from '$app/forms';
+	import { Checkbox } from '@/lib/components/ui/checkbox';
 
 	export let data: PageData;
 
-	$: trendData = data.trendData;
+	interface TorrentTrendItem {
+		name: string;
+		countries: string[];
+		dates: string[];
+		ranks: number[];
+		bestRank: number;
+		totalEntries: number;
+		avgRank: number;
+		downloaded: boolean;
+		downloadedAt: string | null;
+		torrentTrackerId: number;
+	}
+
+	$: trendData = data.trendData as TorrentTrendItem[];
+
+	// 표시할 항목 수 관리
+	let showAll = false;
+	const initialLimit = 50;
+
+	$: displayedData = showAll ? trendData : trendData.slice(0, initialLimit);
+	$: hasMoreItems = trendData.length > initialLimit;
 
 	function formatCountries(countries: string[]): string {
 		if (countries.length <= 2) {
@@ -39,31 +61,69 @@
 		if (rank <= 20) return 'bg-green-100 text-green-800';
 		return 'bg-gray-100 text-gray-800';
 	}
+
+	function formatDownloadDate(dateString: string | null): string {
+		if (!dateString) return '-';
+		return dateString;
+	}
+
+	async function handleDownloadStatusChange(torrentTrackerId: number, downloaded: boolean) {
+		const formData = new FormData();
+		formData.append('torrentTrackerId', torrentTrackerId.toString());
+		formData.append('downloaded', downloaded.toString());
+
+		try {
+			const response = await fetch('?/updateDownloadStatus', {
+				method: 'POST',
+				body: formData
+			});
+
+			if (response.ok) {
+				// 페이지 새로고침하여 최신 데이터 반영
+				window.location.reload();
+			} else {
+				console.error('다운로드 상태 업데이트 실패');
+			}
+		} catch (error) {
+			console.error('다운로드 상태 업데이트 중 오류:', error);
+		}
+	}
+
+	function toggleShowAll() {
+		showAll = !showAll;
+	}
 </script>
 
-<div class="container mx-auto p-6 flex flex-col gap-4 h-full">
+<div class="container mx-auto p-6 flex flex-col h-full">
 	<div class="mb-4">
 		<h1 class="text-3xl font-bold text-gray-900 mb-2">Torrent Trend</h1>
 		<p class="text-gray-600">토렌트 트래커 히스토리를 기반으로 한 인기 토렌트 순위표</p>
-		<p class="text-sm text-gray-500 mt-1">총 {trendData.length}개의 토렌트 항목</p>
+		<div class="flex items-center gap-4 mt-1">
+			<p class="text-sm text-gray-500">총 {trendData.length}개의 토렌트 항목</p>
+			{#if !showAll && hasMoreItems}
+				<p class="text-sm text-blue-600">상위 {initialLimit}개 표시 중</p>
+			{/if}
+		</div>
 	</div>
 
 	{#if trendData.length > 0}
 		<div class="bg-white rounded-lg shadow h-0 flex-auto flex flex-col">
-			<!-- 고정 헤더 -->
+			<!-- 고정적 헤더 -->
 			<div class="border-b bg-gray-50 flex-shrink-0">
-				<Table.Root>
+				<Table.Root class="table-fixed">
 					<Table.Header>
 						<Table.Row class="bg-gray-50">
 							<Table.Head class="w-12 text-center font-bold">순위</Table.Head>
 							<Table.Head class="min-w-[200px] font-bold">토렌트 이름</Table.Head>
-							<Table.Head class="w-32 font-bold">최고 순위</Table.Head>
-							<Table.Head class="w-32 font-bold">평균 순위</Table.Head>
-							<Table.Head class="w-40 font-bold">순위 범위</Table.Head>
-							<Table.Head class="w-48 font-bold">등장 국가</Table.Head>
+							<Table.Head class="w-24 font-bold text-center">최고 순위</Table.Head>
+							<Table.Head class="w-24 font-bold text-center">평균 순위</Table.Head>
+							<Table.Head class="w-32 font-bold text-center">순위 범위</Table.Head>
+							<Table.Head class="w-24 font-bold text-center">등장 국가</Table.Head>
 							<Table.Head class="w-56 font-bold">등장 기간</Table.Head>
 							<Table.Head class="w-20 text-center font-bold">등장 횟수</Table.Head>
 							<Table.Head class="w-20 text-center font-bold">BTDig</Table.Head>
+							<Table.Head class="w-32 text-center font-bold">다운로드 일자</Table.Head>
+							<Table.Head class="w-24 text-center font-bold">다운로드</Table.Head>
 						</Table.Row>
 					</Table.Header>
 				</Table.Root>
@@ -71,9 +131,9 @@
 
 			<!-- 스크롤 가능한 바디 -->
 			<ScrollArea class="flex-1 overflow-auto">
-				<Table.Root>
+				<Table.Root class="table-fixed">
 					<Table.Body>
-						{#each trendData as item, index}
+						{#each displayedData as item, index}
 							<Table.Row class="hover:bg-gray-50">
 								<Table.Cell class="w-12 text-center font-medium">
 									{index + 1}
@@ -81,7 +141,7 @@
 								<Table.Cell class="min-w-[200px] font-medium max-w-0 truncate" title={item.name}>
 									{item.name}
 								</Table.Cell>
-								<Table.Cell class="w-32">
+								<Table.Cell class="w-24 text-center">
 									<span
 										class="inline-flex px-2 py-1 text-xs font-semibold rounded-full {getRankBadgeClass(
 											item.bestRank
@@ -90,17 +150,17 @@
 										{item.bestRank}위
 									</span>
 								</Table.Cell>
-								<Table.Cell class="w-32">
+								<Table.Cell class="w-24 text-center">
 									<span class="text-sm text-gray-600">
 										{item.avgRank}위
 									</span>
 								</Table.Cell>
-								<Table.Cell class="w-40">
+								<Table.Cell class="w-32 text-center">
 									<span class="text-sm text-gray-600">
 										{formatRanks(item.ranks)}
 									</span>
 								</Table.Cell>
-								<Table.Cell class="w-48">
+								<Table.Cell class="w-24">
 									<div class="text-sm text-gray-600" title={item.countries.join(', ')}>
 										{formatCountries(item.countries)}
 									</div>
@@ -129,12 +189,44 @@
 										BTDig
 									</Button>
 								</Table.Cell>
+								<Table.Cell class="w-32 text-center">
+									<span
+										class="text-sm {item.downloadedAt
+											? 'text-green-600 font-medium'
+											: 'text-gray-400'}"
+									>
+										{formatDownloadDate(item.downloadedAt)}
+									</span>
+								</Table.Cell>
+
+								<Table.Cell class="w-24">
+									<div class="flex justify-center">
+										<Checkbox
+											checked={item.downloaded}
+											onCheckedChange={(checked) =>
+												handleDownloadStatusChange(item.torrentTrackerId, checked)}
+										/>
+									</div>
+								</Table.Cell>
 							</Table.Row>
 						{/each}
 					</Table.Body>
 				</Table.Root>
 			</ScrollArea>
 		</div>
+
+		<!-- Expand/Collapse 버튼 -->
+		{#if hasMoreItems}
+			<div class="flex justify-center mt-4">
+				<Button variant="outline" onclick={toggleShowAll} class="px-8 py-2">
+					{#if showAll}
+						📋 상위 {initialLimit}개만 보기 ({trendData.length - initialLimit}개 숨기기)
+					{:else}
+						📊 전체 {trendData.length}개 보기 (+{trendData.length - initialLimit}개 더보기)
+					{/if}
+				</Button>
+			</div>
+		{/if}
 	{:else}
 		<div class="bg-white rounded-lg shadow p-8 text-center">
 			<div class="text-gray-400 text-lg mb-2">📊</div>
@@ -146,6 +238,6 @@
 
 <style>
 	.container {
-		max-width: 1400px;
+		max-width: 1500px;
 	}
 </style>
