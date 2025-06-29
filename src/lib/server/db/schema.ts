@@ -33,3 +33,15 @@ export const torrent_tracker_history = sqliteTable('torrent-tracker-history', {
 		.notNull()
 		.default(sql`(strftime('%s', 'now'))`)
 });
+
+export const torrent_trend = sqliteTable('torrent-trend', {
+	id: integer('id').primaryKey({ autoIncrement: true }),
+	torrent_tracker_id: integer('torrent_tracker_id')
+		.notNull()
+		.references(() => torrent_tracker_history.id),
+	downloaded: integer('downloaded', { mode: 'boolean' }).notNull().default(false),
+	downloadedAt: integer('downloadedAt'),
+	createdAt: integer('createdAt')
+		.notNull()
+		.default(sql`(strftime('%s', 'now'))`)
+});
