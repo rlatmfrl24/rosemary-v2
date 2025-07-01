@@ -6,11 +6,17 @@ import { COUNTRIES, DEFAULT_DATE_OFFSET } from './types';
 export class TorrentTrackerState {
 	tableData = $state<TorrentItem[]>([]);
 	trendDate = $state<DateValue>(
-		new CalendarDate(
-			new Date().getFullYear(),
-			new Date().getMonth() + 1,
-			new Date().getDate() - DEFAULT_DATE_OFFSET
-		)
+		(() => {
+			const today = new Date();
+			const targetDate = new Date(today);
+			targetDate.setDate(today.getDate() - DEFAULT_DATE_OFFSET);
+
+			return new CalendarDate(
+				targetDate.getFullYear(),
+				targetDate.getMonth() + 1,
+				targetDate.getDate()
+			);
+		})()
 	);
 	raw = $state('');
 	isLoading = $state(false);
