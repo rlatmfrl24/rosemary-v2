@@ -15,6 +15,8 @@ interface TorrentTrendItem {
 	downloaded: boolean;
 	downloadedAt: string | null;
 	torrentTrackerId: number; // 대표 ID (첫 번째 항목)
+	trendScore: number; // 최신 트렌드 점수
+	recentActivity: boolean; // 최근 활동 여부
 }
 
 interface GroupedItem {
@@ -80,23 +82,76 @@ export const load: PageServerLoad = async (event) => {
 			return acc;
 		}, {});
 
-		// 배열로 변환하고 정렬 (등장 횟수 내림차순 기준 -> 평균 순위 오름차순 기준 -> 최고 순위 오름차순 기준)
+		// 최신 트렌드를 반영하는 정렬 알고리즘 적용
+		const now = new Date();
 		const trendData: TorrentTrendItem[] = Object.values(groupedData)
-			.map((group: GroupedItem) => ({
-				name: group.name,
-				countries: Array.from(group.countries).sort(),
-				dates: Array.from(group.dates).sort(),
-				ranks: group.ranks.sort((a: number, b: number) => a - b),
-				bestRank: group.bestRank,
-				totalEntries: group.totalEntries,
-				avgRank: Math.round(
-					group.ranks.reduce((sum: number, rank: number) => sum + rank, 0) / group.ranks.length
-				),
-				downloaded: group.downloaded,
-				downloadedAt: group.downloadedAt,
-				torrentTrackerId: group.torrentTrackerId
-			}))
+			.map((group: GroupedItem) => {
+				const sortedDates = Array.from(group.dates).sort();
+				const sortedRanks = group.ranks.sort((a: number, b: number) => a - b);
+
+				// 최근 7일 이내의 데이터 확인
+				const recentDates = sortedDates.filter((date) => {
+					const dateObj = new Date(date);
+					const diffTime = now.getTime() - dateObj.getTime();
+					const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+					return diffDays <= 7;
+				});
+
+				// 최근 활동 점수 계산 (최근 7일 이내 활동 = 높은 점수)
+				const recentActivityScore = recentDates.length > 0 ? 100 : 0;
+
+				// 날짜별 가중치 적용한 평균 순위 계산
+				let weightedRankSum = 0;
+				let totalWeight = 0;
+
+				// 각 날짜에 대해 가중치 계산 (최근일수록 높은 가중치)
+				for (const date of sortedDates) {
+					const dateObj = new Date(date);
+					const diffTime = now.getTime() - dateObj.getTime();
+					const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+					// 최근 30일 이내는 높은 가중치, 그 이후는 낮은 가중치
+					const weight = diffDays <= 30 ? Math.max(1, 31 - diffDays) : 0.1;
+					const rankIndex = sortedDates.indexOf(date);
+
+					if (rankIndex < group.ranks.length) {
+						weightedRankSum += group.ranks[rankIndex] * weight;
+						totalWeight += weight;
+					}
+				}
+
+				const weightedAvgRank =
+					totalWeight > 0
+						? weightedRankSum / totalWeight
+						: group.ranks.reduce((sum: number, rank: number) => sum + rank, 0) / group.ranks.length;
+
+				// 최신 트렌드 점수 계산
+				const trendScore =
+					recentActivityScore + 1000 / (weightedAvgRank + 1) + group.totalEntries * 10;
+
+				return {
+					name: group.name,
+					countries: Array.from(group.countries).sort(),
+					dates: sortedDates,
+					ranks: sortedRanks,
+					bestRank: group.bestRank,
+					totalEntries: group.totalEntries,
+					avgRank: Math.round(
+						group.ranks.reduce((sum: number, rank: number) => sum + rank, 0) / group.ranks.length
+					),
+					downloaded: group.downloaded,
+					downloadedAt: group.downloadedAt,
+					torrentTrackerId: group.torrentTrackerId,
+					trendScore, // 디버깅용 추가
+					recentActivity: recentDates.length > 0 // 최근 활동 여부
+				};
+			})
 			.sort((a: TorrentTrendItem, b: TorrentTrendItem) => {
+				// 최신 트렌드 점수 기준 내림차순 정렬
+				if (Math.abs(a.trendScore - b.trendScore) > 0.1) {
+					return b.trendScore - a.trendScore;
+				}
+				// 점수가 비슷하면 기존 기준 적용
 				if (a.totalEntries !== b.totalEntries) return b.totalEntries - a.totalEntries;
 				if (a.avgRank !== b.avgRank) return a.avgRank - b.avgRank;
 				return a.bestRank - b.bestRank;
