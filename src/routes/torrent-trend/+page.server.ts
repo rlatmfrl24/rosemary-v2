@@ -29,6 +29,42 @@ interface GroupedItem {
 	torrentTrackerId: number;
 	downloaded: boolean;
 	downloadedAt: string | null;
+	// 새로운 알고리즘을 위한 원시 데이터 저장
+	rawEntries: Array<{
+		date: string;
+		rank: number;
+	}>;
+}
+
+/**
+ * 시간 가중치를 적용하여 토렌트 트렌드 점수를 계산하는 함수
+ * @param rawEntries - 각 날짜별 순위 데이터 배열
+ * @param lambdaVal - 시간 가중치 감쇠 상수 (기본값: 0.1)
+ * @returns 계산된 트렌드 점수
+ */
+function calculateAdvancedTrendScore(
+	rawEntries: Array<{ date: string; rank: number }>,
+	lambdaVal: number = 0.1
+): number {
+	const today = new Date();
+
+	return rawEntries.reduce((totalScore, entry) => {
+		const entryDate = new Date(entry.date);
+
+		// 오늘과 데이터 날짜 간의 차이 (일 단위)
+		const daysSinceToday = Math.floor((today.getTime() - entryDate.getTime()) / (1000 * 3600 * 24));
+
+		// 시간 가중치 (지수 감쇠 적용)
+		const timeWeight = Math.pow(2, -lambdaVal * daysSinceToday);
+
+		// 순위 점수 (순위의 역수)
+		const rankScore = 1 / entry.rank;
+
+		// 일일 점수
+		const dailyScore = rankScore * timeWeight;
+
+		return totalScore + dailyScore;
+	}, 0);
 }
 
 export const load: PageServerLoad = async (event) => {
@@ -61,7 +97,8 @@ export const load: PageServerLoad = async (event) => {
 					totalEntries: 0,
 					torrentTrackerId: item.id,
 					downloaded: false,
-					downloadedAt: null
+					downloadedAt: null,
+					rawEntries: []
 				};
 			}
 
@@ -70,6 +107,10 @@ export const load: PageServerLoad = async (event) => {
 			acc[item.name].ranks.push(item.rank);
 			acc[item.name].bestRank = Math.min(acc[item.name].bestRank, item.rank);
 			acc[item.name].totalEntries++;
+			acc[item.name].rawEntries.push({
+				date: item.date,
+				rank: item.rank
+			});
 
 			// 다운로드 상태는 하나라도 true면 true로 설정
 			if (item.downloaded) {
@@ -82,7 +123,7 @@ export const load: PageServerLoad = async (event) => {
 			return acc;
 		}, {});
 
-		// 최신 트렌드를 반영하는 정렬 알고리즘 적용
+		// 새로운 고급 트렌드 점수 계산 적용
 		const now = new Date();
 		const trendData: TorrentTrendItem[] = Object.values(groupedData)
 			.map((group: GroupedItem) => {
@@ -97,37 +138,8 @@ export const load: PageServerLoad = async (event) => {
 					return diffDays <= 7;
 				});
 
-				// 최근 활동 점수 계산 (최근 7일 이내 활동 = 높은 점수)
-				const recentActivityScore = recentDates.length > 0 ? 100 : 0;
-
-				// 날짜별 가중치 적용한 평균 순위 계산
-				let weightedRankSum = 0;
-				let totalWeight = 0;
-
-				// 각 날짜에 대해 가중치 계산 (최근일수록 높은 가중치)
-				for (const date of sortedDates) {
-					const dateObj = new Date(date);
-					const diffTime = now.getTime() - dateObj.getTime();
-					const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-
-					// 최근 30일 이내는 높은 가중치, 그 이후는 낮은 가중치
-					const weight = diffDays <= 30 ? Math.max(1, 31 - diffDays) : 0.1;
-					const rankIndex = sortedDates.indexOf(date);
-
-					if (rankIndex < group.ranks.length) {
-						weightedRankSum += group.ranks[rankIndex] * weight;
-						totalWeight += weight;
-					}
-				}
-
-				const weightedAvgRank =
-					totalWeight > 0
-						? weightedRankSum / totalWeight
-						: group.ranks.reduce((sum: number, rank: number) => sum + rank, 0) / group.ranks.length;
-
-				// 최신 트렌드 점수 계산
-				const trendScore =
-					recentActivityScore + 1000 / (weightedAvgRank + 1) + group.totalEntries * 10;
+				// 새로운 고급 트렌드 점수 계산 (람다값 0.1 사용)
+				const advancedTrendScore = calculateAdvancedTrendScore(group.rawEntries, 0.1);
 
 				return {
 					name: group.name,
@@ -142,19 +154,13 @@ export const load: PageServerLoad = async (event) => {
 					downloaded: group.downloaded,
 					downloadedAt: group.downloadedAt,
 					torrentTrackerId: group.torrentTrackerId,
-					trendScore, // 디버깅용 추가
+					trendScore: advancedTrendScore, // 새로운 고급 트렌드 점수 사용
 					recentActivity: recentDates.length > 0 // 최근 활동 여부
 				};
 			})
 			.sort((a: TorrentTrendItem, b: TorrentTrendItem) => {
-				// 최신 트렌드 점수 기준 내림차순 정렬
-				if (Math.abs(a.trendScore - b.trendScore) > 0.1) {
-					return b.trendScore - a.trendScore;
-				}
-				// 점수가 비슷하면 기존 기준 적용
-				if (a.totalEntries !== b.totalEntries) return b.totalEntries - a.totalEntries;
-				if (a.avgRank !== b.avgRank) return a.avgRank - b.avgRank;
-				return a.bestRank - b.bestRank;
+				// 새로운 트렌드 점수 기준 내림차순 정렬
+				return b.trendScore - a.trendScore;
 			});
 
 		return {

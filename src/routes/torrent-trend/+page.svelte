@@ -19,6 +19,7 @@
 		downloaded: boolean;
 		downloadedAt: string | null;
 		torrentTrackerId: number;
+		trendScore: number;
 	}
 
 	$: trendData = data.trendData as TorrentTrendItem[];
@@ -121,6 +122,7 @@
 							<Table.Head class="w-24 font-bold text-center">등장 국가</Table.Head>
 							<Table.Head class="w-56 font-bold">등장 기간</Table.Head>
 							<Table.Head class="w-20 text-center font-bold">등장 횟수</Table.Head>
+							<Table.Head class="w-20 text-center font-bold">트렌드 점수</Table.Head>
 							<Table.Head class="w-20 text-center font-bold">BTDig</Table.Head>
 							<Table.Head class="w-32 text-center font-bold">다운로드 일자</Table.Head>
 							<Table.Head class="w-24 text-center font-bold">다운로드</Table.Head>
@@ -178,6 +180,11 @@
 									</span>
 								</Table.Cell>
 								<Table.Cell class="w-20 text-center">
+									<span class="text-sm text-gray-600">
+										{item.trendScore.toFixed(3)}
+									</span>
+								</Table.Cell>
+								<Table.Cell class="w-20 text-center">
 									<Button
 										size="sm"
 										onclick={() =>
@@ -189,6 +196,7 @@
 										BTDig
 									</Button>
 								</Table.Cell>
+
 								<Table.Cell class="w-32 text-center">
 									<span
 										class="text-sm {item.downloadedAt
