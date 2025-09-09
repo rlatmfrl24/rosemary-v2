@@ -136,7 +136,11 @@
 				<Table.Root class="table-fixed">
 					<Table.Body>
 						{#each displayedData as item, index}
-							<Table.Row class="hover:bg-gray-50">
+							<Table.Row
+								class="hover:bg-gray-50 {item.totalEntries >= 5
+									? 'bg-yellow-50 border-l-4 border-yellow-400'
+									: ''}"
+							>
 								<Table.Cell class="w-12 text-center font-medium">
 									{index + 1}
 								</Table.Cell>
