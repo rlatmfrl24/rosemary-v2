@@ -193,7 +193,7 @@
 										size="sm"
 										onclick={() =>
 											window.open(
-												`https://btdig.com/search?q=${encodeURIComponent(item.name)}`,
+												`https://bt4gprx.com/search?q=${encodeURIComponent(item.name)}`,
 												'_blank'
 											)}
 									>

@@ -28,7 +28,7 @@ export const COUNTRIES = ['KR', 'US', 'JP', 'CN'] as const;
 export type Country = (typeof COUNTRIES)[number];
 
 export const URLS = {
-	btDig: 'https://btdig.com/search?q=',
+	btDig: 'https://bt4gprx.com/search?q=',
 	iKnowWhatYouDownload: 'https://iknowwhatyoudownload.com/en/stat/'
 } as const;
 
