@@ -36,6 +36,13 @@
       "when": 1751235957873,
       "tag": "0004_mixed_mad_thinker",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1762471931485,
+      "tag": "0005_curious_pestilence",
+      "breakpoints": true
     }
   ]
 }

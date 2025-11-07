@@ -45,3 +45,12 @@ export const torrent_trend = sqliteTable('torrent-trend', {
 		.notNull()
 		.default(sql`(strftime('%s', 'now'))`)
 });
+
+export const local_trend = sqliteTable('local-trend', {
+	id: integer('id').primaryKey({ autoIncrement: true }),
+	name: text('name').notNull(),
+	downloaded: integer('downloaded', { mode: 'boolean' }).notNull().default(false),
+	createdAt: integer('createdAt')
+		.notNull()
+		.default(sql`(strftime('%s', 'now'))`)
+});

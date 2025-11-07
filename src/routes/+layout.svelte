@@ -19,6 +19,7 @@
 			<a href="/hitomi-tracker">Hitomi Tracker</a>
 			<a href="/torrent-tracker">Torrent Tracker</a>
 			<a href="/torrent-trend">Torrent Trend</a>
+			<a href="/local-trend">Local Trend</a>
 		</nav>
 	</header>
 	<main class="w-full h-full">
