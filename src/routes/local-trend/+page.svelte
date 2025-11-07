@@ -5,8 +5,47 @@
 	import { Textarea } from '@/lib/components/ui/textarea';
 	import { ScrollArea } from '@/lib/components/ui/scroll-area';
 	import { Checkbox } from '$lib/components/ui/checkbox';
+	import { onMount } from 'svelte';
 
 	export let data: PageData;
+
+	// 타겟 호스트와 경로 관리 (localStorage에 저장)
+	const STORAGE_KEY_HOST = 'local-trend-target-host';
+	const STORAGE_KEY_PATH = 'local-trend-target-path';
+	const DEFAULT_TARGET_HOST = 'https://torrentbot215.site';
+	const DEFAULT_TARGET_PATH = '/topic/index?top=20';
+
+	let targetHost = DEFAULT_TARGET_HOST;
+	let targetPath = DEFAULT_TARGET_PATH;
+
+	// localStorage에서 로드
+	onMount(() => {
+		const savedHost = localStorage.getItem(STORAGE_KEY_HOST);
+		const savedPath = localStorage.getItem(STORAGE_KEY_PATH);
+		if (savedHost) {
+			targetHost = savedHost;
+		}
+		if (savedPath) {
+			targetPath = savedPath;
+		}
+	});
+
+	// 타겟 URL 계산 (텍스트로 표시용)
+	$: targetUrl = `${targetHost}${targetPath}`;
+
+	// 호스트 변경 핸들러
+	function handleTargetHostChange() {
+		if (typeof window !== 'undefined' && targetHost) {
+			localStorage.setItem(STORAGE_KEY_HOST, targetHost);
+		}
+	}
+
+	// 경로 변경 핸들러
+	function handleTargetPathChange() {
+		if (typeof window !== 'undefined' && targetPath) {
+			localStorage.setItem(STORAGE_KEY_PATH, targetPath);
+		}
+	}
 
 	// 텍스트 입력
 	let inputText = '';
@@ -63,7 +102,7 @@
 
 	// 검색 링크 생성 함수
 	function getSearchUrl(item: string): string {
-		return `https://www.google.com/search?q=${encodeURIComponent(item)}`;
+		return `https://bt4gprx.com/search?q=${encodeURIComponent(item)}`;
 	}
 
 	// 날짜 포맷 함수
@@ -75,6 +114,13 @@
 			hour: '2-digit',
 			minute: '2-digit'
 		});
+	}
+
+	// 타겟 페이지로 이동
+	function navigateToTarget() {
+		if (targetUrl) {
+			window.open(targetUrl, '_blank');
+		}
 	}
 
 	// 데이터 저장 핸들러
@@ -187,18 +233,63 @@
 	</div>
 
 	<!-- 메인 레이아웃: 왼쪽 입력 영역 + 오른쪽 테이블 영역 -->
-	<div class="flex gap-4 flex-1 min-h-0">
+	<div class="flex gap-4 h-0 flex-auto">
 		<!-- 왼쪽: 입력 영역 (좁게) -->
-		<div class="flex flex-col gap-4 w-96 flex-shrink-0">
+		<div class="flex flex-col gap-3 w-96 flex-shrink-0 h-full">
+			<!-- 타겟 페이지 설정 섹션 -->
+			<div class="bg-white rounded-lg shadow p-3 flex-shrink-0">
+				<h2 class="text-lg font-semibold text-gray-900 mb-2">타겟 페이지 설정</h2>
+				<div class="flex flex-col gap-2">
+					<div class="flex flex-col gap-1">
+						<label for="target-host" class="text-xs font-medium text-gray-700"> 호스트: </label>
+						<input
+							id="target-host"
+							type="text"
+							bind:value={targetHost}
+							oninput={handleTargetHostChange}
+							placeholder="https://example.com"
+							class="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+						/>
+					</div>
+					<div class="flex flex-col gap-1">
+						<label for="target-path" class="text-xs font-medium text-gray-700"> 경로: </label>
+						<input
+							id="target-path"
+							type="text"
+							bind:value={targetPath}
+							oninput={handleTargetPathChange}
+							placeholder="/path/to/page"
+							class="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+						/>
+					</div>
+					<div class="flex flex-col gap-1">
+						<span class="text-xs font-medium text-gray-700">타겟 URL:</span>
+						<div
+							class="px-2 py-1.5 bg-gray-50 border border-gray-200 rounded-md text-xs text-gray-700 break-all"
+						>
+							{targetUrl}
+						</div>
+					</div>
+					<Button
+						onclick={navigateToTarget}
+						disabled={!targetUrl.trim()}
+						size="sm"
+						class="w-full mt-1"
+					>
+						🔗 타겟 페이지로 이동
+					</Button>
+				</div>
+			</div>
+
 			<!-- 텍스트 입력 섹션 -->
 			<div class="bg-white rounded-lg shadow p-3 flex flex-col flex-1 min-h-0">
-				<h2 class="text-lg font-semibold text-gray-900 mb-2">텍스트 입력</h2>
+				<h2 class="text-lg font-semibold text-gray-900 mb-2 flex-shrink-0">텍스트 입력</h2>
 				<Textarea
 					bind:value={inputText}
 					placeholder="텍스트를 입력하세요 (줄바꿈으로 구분)"
-					class="min-h-48 flex-1 text-sm"
+					class="flex-1 text-sm resize-none"
 				/>
-				<div class="mt-2 flex items-center justify-between">
+				<div class="mt-2 flex items-center justify-between flex-shrink-0">
 					<div class="text-xs text-gray-500">입력된 항목 수: {parsedData.length}개</div>
 					{#if parsedData.length > 0}
 						<Button onclick={handleSaveItems} variant="default" size="sm">💾 DB에 저장</Button>
@@ -208,7 +299,7 @@
 		</div>
 
 		<!-- 오른쪽: DB에서 로드된 데이터 테이블 (넓게) -->
-		<div class="flex-1 min-w-0">
+		<div class="flex-1 min-w-0 h-full">
 			{#if dbItems.length > 0}
 				<div class="bg-white rounded-lg shadow h-full flex flex-col">
 					<div class="p-3 border-b bg-gray-50">
