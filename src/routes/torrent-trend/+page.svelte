@@ -28,8 +28,17 @@
 	let showAll = false;
 	const initialLimit = 50;
 
-	$: displayedData = showAll ? trendData : trendData.slice(0, initialLimit);
-	$: hasMoreItems = trendData.length > initialLimit;
+	// 다운로드한 항목 숨김 토글
+	let hideDownloaded = false;
+
+	// 다운로드 필터링된 데이터
+	$: filteredData = hideDownloaded
+		? trendData.filter((item) => !item.downloaded)
+		: trendData;
+
+	// 표시할 데이터 (필터링 후 제한 적용)
+	$: displayedData = showAll ? filteredData : filteredData.slice(0, initialLimit);
+	$: hasMoreItems = filteredData.length > initialLimit;
 
 	function formatCountries(countries: string[]): string {
 		if (countries.length <= 2) {
@@ -93,17 +102,42 @@
 	function toggleShowAll() {
 		showAll = !showAll;
 	}
+
+	function toggleHideDownloaded() {
+		hideDownloaded = !hideDownloaded;
+		// 필터 변경 시 항상 처음부터 보기
+		showAll = false;
+	}
 </script>
 
 <div class="container mx-auto p-6 flex flex-col h-full">
 	<div class="mb-4">
 		<h1 class="text-3xl font-bold text-gray-900 mb-2">Torrent Trend</h1>
 		<p class="text-gray-600">토렌트 트래커 히스토리를 기반으로 한 인기 토렌트 순위표</p>
-		<div class="flex items-center gap-4 mt-1">
-			<p class="text-sm text-gray-500">총 {trendData.length}개의 토렌트 항목</p>
-			{#if !showAll && hasMoreItems}
-				<p class="text-sm text-blue-600">상위 {initialLimit}개 표시 중</p>
-			{/if}
+		<div class="flex items-center gap-4 mt-3">
+			<div class="flex items-center gap-2">
+				<Button
+					variant={hideDownloaded ? "default" : "outline"}
+					size="sm"
+					onclick={toggleHideDownloaded}
+					class="px-4 py-2"
+				>
+					{hideDownloaded ? "✅ 다운로드한 항목 숨김" : "👁️ 다운로드한 항목 표시"}
+				</Button>
+			</div>
+			<div class="flex items-center gap-4">
+				<p class="text-sm text-gray-500">
+					총 {trendData.length}개
+					{#if hideDownloaded}
+						<span class="text-blue-600">
+							(다운로드한 {trendData.length - filteredData.length}개 숨김, {filteredData.length}개 표시)
+						</span>
+					{/if}
+				</p>
+				{#if !showAll && hasMoreItems}
+					<p class="text-sm text-blue-600">상위 {initialLimit}개 표시 중</p>
+				{/if}
+			</div>
 		</div>
 	</div>
 
