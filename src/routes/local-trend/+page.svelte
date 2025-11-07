@@ -7,7 +7,7 @@
 	import { Checkbox } from '$lib/components/ui/checkbox';
 	import { onMount } from 'svelte';
 
-	export let data: PageData;
+	const { data }: { data: PageData } = $props();
 
 	// 타겟 호스트와 경로 관리 (localStorage에 저장)
 	const STORAGE_KEY_HOST = 'local-trend-target-host';
@@ -15,8 +15,14 @@
 	const DEFAULT_TARGET_HOST = 'https://torrentbot215.site';
 	const DEFAULT_TARGET_PATH = '/topic/index?top=20';
 
-	let targetHost = DEFAULT_TARGET_HOST;
-	let targetPath = DEFAULT_TARGET_PATH;
+	let targetHost = $state(DEFAULT_TARGET_HOST);
+	let targetPath = $state(DEFAULT_TARGET_PATH);
+
+	// 헤더 링크 버튼 (하드코딩)
+	const link1Text = 'Kissjav 인기 영상';
+	const link1Url = 'https://kissjav.com/most-popular/?sort_by=video_viewed_week'; // 여기에 URL을 입력하세요
+	const link2Text = 'Twidouga 인기 영상';
+	const link2Url = 'https://www.twidouga.net/ko/ranking_t.php'; // 여기에 URL을 입력하세요
 
 	// localStorage에서 로드
 	onMount(() => {
@@ -31,7 +37,7 @@
 	});
 
 	// 타겟 URL 계산 (텍스트로 표시용)
-	$: targetUrl = `${targetHost}${targetPath}`;
+	const targetUrl = $derived(`${targetHost}${targetPath}`);
 
 	// 호스트 변경 핸들러
 	function handleTargetHostChange() {
@@ -48,15 +54,25 @@
 	}
 
 	// 텍스트 입력
-	let inputText = '';
+	let inputText = $state('');
+
+	// 다운로드한 항목 숨기기 상태
+	let hideDownloaded = $state(false);
 
 	// DB에서 로드된 데이터
-	$: dbItems = (data.items || []) as Array<{
-		id: number;
-		name: string;
-		downloaded: boolean;
-		createdAt: number;
-	}>;
+	const dbItems = $derived(
+		(data.items || []) as Array<{
+			id: number;
+			name: string;
+			downloaded: boolean;
+			createdAt: number;
+		}>
+	);
+
+	// 필터링된 데이터 (다운로드한 항목 숨기기 옵션 적용)
+	const filteredDbItems = $derived(
+		hideDownloaded ? dbItems.filter((item) => !item.downloaded) : dbItems
+	);
 
 	// 텍스트 파싱 함수
 	// 각 줄의 맨 앞에 있는 인덱스 숫자와 맨 뒤의 날짜를 제거하고 실제 텍스트만 추출
@@ -98,7 +114,7 @@
 	}
 
 	// 텍스트 변경 시 자동 파싱
-	$: parsedData = parseText(inputText);
+	const parsedData = $derived(parseText(inputText));
 
 	// 검색 링크 생성 함수
 	function getSearchUrl(item: string): string {
@@ -227,9 +243,23 @@
 </script>
 
 <div class="container mx-auto p-6 flex flex-col h-full gap-4">
-	<div class="mb-2">
-		<h1 class="text-3xl font-bold text-gray-900 mb-2">Local Trend</h1>
-		<p class="text-gray-600">로컬 텍스트 데이터를 파싱하여 트렌드를 확인합니다</p>
+	<div class="mb-2 flex items-start justify-between">
+		<div>
+			<h1 class="text-3xl font-bold text-gray-900 mb-2">Local Trend</h1>
+			<p class="text-gray-600">로컬 텍스트 데이터를 파싱하여 트렌드를 확인합니다</p>
+		</div>
+		<div class="flex gap-2">
+			{#if link1Url.trim()}
+				<Button variant="secondary" size="sm" onclick={() => window.open(link1Url, '_blank')}>
+					{link1Text}
+				</Button>
+			{/if}
+			{#if link2Url.trim()}
+				<Button variant="secondary" size="sm" onclick={() => window.open(link2Url, '_blank')}>
+					{link2Text}
+				</Button>
+			{/if}
+		</div>
 	</div>
 
 	<!-- 메인 레이아웃: 왼쪽 입력 영역 + 오른쪽 테이블 영역 -->
@@ -302,8 +332,19 @@
 		<div class="flex-1 min-w-0 h-full">
 			{#if dbItems.length > 0}
 				<div class="bg-white rounded-lg shadow h-full flex flex-col">
-					<div class="p-3 border-b bg-gray-50">
-						<h2 class="text-lg font-semibold text-gray-900">저장된 데이터 ({dbItems.length}개)</h2>
+					<div class="p-3 border-b bg-gray-50 flex items-center justify-between">
+						<h2 class="text-lg font-semibold text-gray-900">
+							저장된 데이터 ({filteredDbItems.length}개
+							{#if hideDownloaded && filteredDbItems.length !== dbItems.length}
+								/ 전체 {dbItems.length}개
+							{/if})
+						</h2>
+						<div class="flex items-center gap-2">
+							<label class="flex items-center gap-2 cursor-pointer">
+								<Checkbox bind:checked={hideDownloaded} />
+								<span class="text-sm font-medium text-gray-700">다운로드한 항목 숨기기</span>
+							</label>
+						</div>
 					</div>
 					<!-- 고정적 헤더 -->
 					<div class="border-b bg-gray-50 flex-shrink-0">
@@ -325,7 +366,7 @@
 					<ScrollArea class="flex-1 overflow-auto">
 						<Table.Root class="table-fixed">
 							<Table.Body>
-								{#each dbItems as item, index}
+								{#each filteredDbItems as item, index}
 									<Table.Row class="hover:bg-gray-50">
 										<Table.Cell class="w-16 text-center font-medium text-sm">
 											{index + 1}
@@ -371,6 +412,29 @@
 							</Table.Body>
 						</Table.Root>
 					</ScrollArea>
+				</div>
+			{:else if dbItems.length > 0 && filteredDbItems.length === 0}
+				<div class="bg-white rounded-lg shadow h-full flex flex-col">
+					<div class="p-3 border-b bg-gray-50 flex items-center justify-between">
+						<h2 class="text-lg font-semibold text-gray-900">
+							저장된 데이터 (0개 / 전체 {dbItems.length}개)
+						</h2>
+						<div class="flex items-center gap-2">
+							<label class="flex items-center gap-2 cursor-pointer">
+								<Checkbox bind:checked={hideDownloaded} />
+								<span class="text-sm font-medium text-gray-700">다운로드한 항목 숨기기</span>
+							</label>
+						</div>
+					</div>
+					<div class="flex-1 flex items-center justify-center">
+						<div class="text-center">
+							<div class="text-gray-400 text-lg mb-2">✅</div>
+							<h3 class="text-lg font-medium text-gray-900 mb-2">
+								모든 항목이 다운로드 완료되었습니다
+							</h3>
+							<p class="text-gray-500">필터를 해제하면 모든 항목을 볼 수 있습니다.</p>
+						</div>
+					</div>
 				</div>
 			{:else}
 				<div class="bg-white rounded-lg shadow h-full flex items-center justify-center">
