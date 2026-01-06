@@ -17,8 +17,6 @@
 		<h1 class="text-4xl font-bold mr-6">Rosemary</h1>
 		<nav class="flex items-center gap-4">
 			<a href="/hitomi-tracker">Hitomi Tracker</a>
-			<a href="/torrent-tracker">Torrent Tracker</a>
-			<a href="/torrent-trend">Torrent Trend</a>
 			<a href="/local-trend">Local Trend</a>
 		</nav>
 	</header>
