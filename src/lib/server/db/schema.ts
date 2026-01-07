@@ -23,15 +23,6 @@ export const new_item_list = sqliteTable('new-item-list', {
 		.default(sql`(strftime('%s', 'now'))`)
 });
 
-export const local_trend = sqliteTable('local-trend', {
-	id: integer('id').primaryKey({ autoIncrement: true }),
-	name: text('name').notNull(),
-	downloaded: integer('downloaded', { mode: 'boolean' }).notNull().default(false),
-	createdAt: integer('createdAt')
-		.notNull()
-		.default(sql`(strftime('%s', 'now'))`)
-});
-
 export const weekly_check_posts = sqliteTable(
 	'weekly-check-posts',
 	{

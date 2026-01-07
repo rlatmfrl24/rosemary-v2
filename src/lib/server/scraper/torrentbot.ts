@@ -135,7 +135,12 @@ export async function saveTorrentbotPosts(posts: TorrentbotPost[], db: App.Local
 
 export async function saveTorrentbotState(
 	db: App.Locals['db'],
-	state: Partial<{ targetUrl?: string; status?: string; message?: string | null; lastRun?: number | null }>
+	state: Partial<{
+		targetUrl?: string;
+		status?: string;
+		message?: string | null;
+		lastRun?: number | null;
+	}>
 ) {
 	await upsertScraperState(db, 'torrentbot', state);
 }

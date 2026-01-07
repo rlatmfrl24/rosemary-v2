@@ -67,7 +67,8 @@ export function parseTwidouga(html: string): TwidougaPost[] {
 			site: 'twidouga',
 			sourceId: sourceId,
 			title: titleParts.join(' • '),
-			url: videoUrl ?? tweetUrl ?? null,
+			// 요청된 URL은 X 트윗 링크를 우선 사용하고, 없을 때만 비디오 URL로 대체한다.
+			url: tweetUrl ?? videoUrl ?? null,
 			thumbnail: thumbnail,
 			postedAt: null
 		});

@@ -80,7 +80,12 @@ export async function saveKonePosts(posts: KonePost[], db: App.Locals['db']) {
 
 export async function saveKoneState(
 	db: App.Locals['db'],
-	state: Partial<{ targetUrl?: string; status?: string; message?: string | null; lastRun?: number | null }>
+	state: Partial<{
+		targetUrl?: string;
+		status?: string;
+		message?: string | null;
+		lastRun?: number | null;
+	}>
 ) {
 	await upsertScraperState(db, 'kone', state);
 }

@@ -107,6 +107,8 @@
 		kone: 'https://kone.gg/s/pornvideo'
 	};
 
+	const LOCAL_STORAGE_KEY = 'weekly-check-manual-targets';
+
 	const defaultScraperStates: Record<SiteKey, ScraperState> = {
 		kissav: { status: 'idle', message: '대기 중' },
 		missav: { status: 'idle', message: '대기 중' },
@@ -123,7 +125,7 @@
 	);
 	let scraperTargets = $state<Record<SiteKey, string>>({ ...defaultScraperTargets });
 	let siteFilter = $state<SiteFilter>('all');
-	let readFilter = $state<ReadFilter>('all');
+	let readFilter = $state<ReadFilter>('unread');
 	let showScraperPanel = $state(true);
 	let showThumbnails = $state(true);
 	let manualDialogOpen = $state(false);
@@ -185,7 +187,8 @@
 	});
 
 	$effect(() => {
-		scraperTargets = deriveTargets(scraperStates);
+		const storedManualTargets = getManualTargetsFromStorage();
+		scraperTargets = { ...deriveTargets(scraperStates), ...storedManualTargets };
 	});
 
 	onMount(() => {
@@ -266,6 +269,30 @@
 			if (value) result[site] = value;
 		}
 		return result;
+	}
+
+	function getManualTargetsFromStorage(): Partial<Record<SiteKey, string>> {
+		if (typeof localStorage === 'undefined') return {};
+		try {
+			const raw = localStorage.getItem(LOCAL_STORAGE_KEY);
+			if (!raw) return {};
+			const parsed = JSON.parse(raw) as Partial<Record<SiteKey, string>>;
+			return parsed ?? {};
+		} catch {
+			return {};
+		}
+	}
+
+	function saveManualTargetToStorage(site: SiteKey, value: string) {
+		if (!manualSupportedSites.includes(site)) return;
+		if (typeof localStorage === 'undefined') return;
+		try {
+			const current = getManualTargetsFromStorage();
+			const next = { ...current, [site]: value };
+			localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(next));
+		} catch {
+			// noop
+		}
 	}
 
 	function formatDateTime(date?: Date | null) {
@@ -389,6 +416,7 @@
 
 	async function setScraperTarget(site: SiteKey, value: string) {
 		scraperTargets = { ...scraperTargets, [site]: value };
+		saveManualTargetToStorage(site, value);
 		try {
 			const res = await fetch('/api/weekly-check', {
 				method: 'PATCH',
