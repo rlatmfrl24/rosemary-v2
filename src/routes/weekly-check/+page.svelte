@@ -96,6 +96,8 @@
 	};
 
 	const siteOrder: SiteKey[] = ['kissav', 'missav', 'twidouga', 'kone', 'torrentbot'];
+	const manualSupportedSites: SiteKey[] = ['twidouga', 'kone', 'torrentbot'];
+	const autoSites: SiteKey[] = siteOrder.filter((s) => !manualSupportedSites.includes(s));
 
 	const defaultScraperTargets: Record<SiteKey, string> = {
 		kissav: 'https://kissjav.com/most-popular/?sort_by=video_viewed_week',
@@ -124,6 +126,11 @@ let scraperStates = $state<Record<SiteKey, ScraperState>>(
 	let readFilter = $state<ReadFilter>('all');
 	let showScraperPanel = $state(true);
 	let showThumbnails = $state(true);
+	let manualDialogOpen = $state(false);
+	let manualSite = $state<SiteKey>('twidouga');
+	let manualHtml = $state('');
+	let manualLoading = $state(false);
+	let manualMessage = $state<string | null>(null);
 
 	const statusLabels: Record<ScraperState['status'], string> = {
 		idle: '대기',
@@ -274,6 +281,13 @@ let scraperStates = $state<Record<SiteKey, ScraperState>>(
 		window.open(url, '_blank', 'noreferrer');
 	}
 
+	function openTargetPage(site: SiteKey) {
+		const url = scraperTargets[site];
+		if (!url) return;
+		if (typeof window === 'undefined') return;
+		window.open(url, '_blank', 'noreferrer');
+	}
+
 	function getThumbnail(site: SiteKey, value?: string | null) {
 		if (value && value.trim()) return value;
 		return `https://placehold.co/160x100/0f172a/ffffff?text=${siteLabels[site]}`;
@@ -368,6 +382,45 @@ async function resetData() {
 		showScraperPanel = !showScraperPanel;
 	}
 
+	function openManualDialog(site: SiteKey) {
+		manualSite = site;
+		manualHtml = '';
+		manualMessage = null;
+		manualDialogOpen = true;
+	}
+
+	function closeManualDialog() {
+		if (manualLoading) return;
+		manualDialogOpen = false;
+	}
+
+	async function submitManualHtml() {
+		if (!manualHtml.trim()) return;
+		manualLoading = true;
+		manualMessage = null;
+		try {
+			const res = await fetch(`/api/weekly-check/${manualSite}`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					html: manualHtml,
+					targetUrl: scraperTargets[manualSite]
+				})
+			});
+			if (!res.ok) {
+				const text = await res.text();
+				throw new Error(text || `HTTP ${res.status}`);
+			}
+			await refetchData();
+			manualHtml = '';
+			manualDialogOpen = false;
+		} catch (error) {
+			manualMessage = error instanceof Error ? error.message : '업로드 실패';
+		} finally {
+			manualLoading = false;
+		}
+	}
+
 	async function triggerScrape(site: SiteKey) {
 		const current = scraperStates[site];
 		if (current.status === 'running' || current.status === 'unsupported') return;
@@ -419,6 +472,12 @@ async function resetData() {
 				<p class="text-xs text-muted-foreground">
 					마지막 업데이트: {lastUpdated ? formatDateTime(lastUpdated) : 'N/A'} (목업 기준)
 				</p>
+				<div class="rounded-md border bg-muted/40 p-3 text-xs text-muted-foreground space-y-1">
+					<p class="font-semibold text-foreground">정적 HTML 빠른 추출 방법</p>
+					<p>1) 브라우저에서 해당 페이지 열기 → F12 → Console에 `copy(document.documentElement.outerHTML)` 입력</p>
+					<p>2) 또는 Ctrl+S로 html 저장 후 메모장 등으로 열어 전체 복사</p>
+					<p>3) 광고/추가 스크립트는 무시 가능, 본문 리스트가 포함된 전체 HTML을 붙여넣으세요.</p>
+				</div>
 			</div>
 
 			<div class="flex gap-2">
@@ -446,58 +505,135 @@ async function resetData() {
 				</div>
 			</div>
 			{#if showScraperPanel}
-				<div class="grid gap-3 sm:grid-cols-1 lg:grid-cols-5">
-					{#each siteOrder as site}
-						{@const state = scraperStates[site]}
-						<div
-							class="flex flex-col gap-2 rounded-md border bg-background px-3 py-3 text-sm shadow-sm"
-						>
-							<div class="flex items-center justify-between gap-3">
-								<div class="space-y-1">
-									<div class="flex items-center gap-2 text-base font-medium capitalize">
-										<span>{siteLabels[site]}</span>
-										{#if site === 'torrentbot'}
-											<Badge variant="destructive">비활성</Badge>
-										{/if}
+				<div class="space-y-4">
+					<div class="rounded-md border bg-muted/10 p-3">
+						<div class="mb-2 flex items-center justify-between gap-2">
+							<div class="flex items-center gap-2">
+								<h3 class="text-sm font-semibold">자동 수집 (HTTP)</h3>
+								<Badge variant="outline" class="text-[11px]">kissav / missav</Badge>
+							</div>
+							<p class="text-xs text-muted-foreground">버튼 클릭 시 바로 요청</p>
+						</div>
+						<div class="grid gap-3 sm:grid-cols-1 lg:grid-cols-2">
+							{#each autoSites as site}
+								{@const state = scraperStates[site]}
+								<div class="flex flex-col gap-2 rounded-md border bg-background px-3 py-3 text-sm shadow-sm">
+									<div class="flex items-start justify-between gap-3">
+										<div class="space-y-1">
+											<div class="flex items-center gap-2 text-base font-medium capitalize">
+												<span>{siteLabels[site]}</span>
+											</div>
+											<p class="text-xs text-muted-foreground">
+												{state.message ?? '대기 중'}
+											</p>
+										</div>
+										<div class="flex items-center gap-2">
+											<Badge variant={statusBadgeVariants[state.status]}>
+												{statusLabels[state.status]}
+											</Badge>
+											<Button
+												size="sm"
+												variant="ghost"
+												disabled={state.status === 'running' || state.status === 'unsupported'}
+												onclick={() => triggerScrape(site)}
+											>
+												{state.status === 'running' ? '요청 중...' : '재수집'}
+											</Button>
+										</div>
 									</div>
 									<p class="text-xs text-muted-foreground">
-										{state.message ?? '대기 중'}
+										최신 수집: {formatDateTime(state.lastRun)}
 									</p>
+									<div class="grid gap-1">
+										<label
+											class="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground"
+											for={`scraper-target-${site}`}
+										>
+											타겟 URL
+										</label>
+										<div class="flex gap-2">
+											<input
+												id={`scraper-target-${site}`}
+												type="text"
+												class="w-full rounded-md border bg-background px-2 py-1 text-sm focus-visible:border-primary focus-visible:outline-none"
+												value={scraperTargets[site]}
+												oninput={(event) => setScraperTarget(site, event.currentTarget.value)}
+											/>
+											<Button size="sm" variant="outline" onclick={() => openTargetPage(site)}>
+												페이지 열기
+											</Button>
+										</div>
+									</div>
 								</div>
-								<div class="flex items-center gap-2">
-									<Badge variant={statusBadgeVariants[state.status]}>
-										{statusLabels[state.status]}
-									</Badge>
-									<Button
-										size="sm"
-										variant="ghost"
-										disabled={state.status === 'running' || state.status === 'unsupported'}
-										onclick={() => triggerScrape(site)}
-									>
-										{state.status === 'running' ? '요청 중...' : '재수집'}
-									</Button>
-								</div>
-							</div>
-							<p class="text-xs text-muted-foreground">
-								최신 수집: {formatDateTime(state.lastRun)}
-							</p>
-							<div class="grid gap-1">
-								<label
-									class="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground"
-									for={`scraper-target-${site}`}
-								>
-									타겟 URL
-								</label>
-								<input
-									id={`scraper-target-${site}`}
-									type="text"
-									class="w-full rounded-md border bg-background px-2 py-1 text-sm focus-visible:border-primary focus-visible:outline-none"
-									value={scraperTargets[site]}
-									oninput={(event) => setScraperTarget(site, event.currentTarget.value)}
-								/>
-							</div>
+							{/each}
 						</div>
-					{/each}
+					</div>
+
+					<div class="rounded-md border bg-muted/10 p-3">
+						<div class="mb-2 flex items-center justify-between gap-2">
+							<div class="flex items-center gap-2">
+								<h3 class="text-sm font-semibold">수동 수집 (정적 HTML 붙여넣기)</h3>
+								<Badge variant="outline" class="text-[11px]">twidouga / kone / torrentbot</Badge>
+							</div>
+							<p class="text-xs text-muted-foreground">타겟 페이지 열기 → 소스 복사 → 업로드</p>
+						</div>
+						<div class="grid gap-3 sm:grid-cols-1 lg:grid-cols-3">
+							{#each manualSupportedSites as site}
+								{@const state = scraperStates[site]}
+								<div class="flex flex-col gap-2 rounded-md border bg-background px-3 py-3 text-sm shadow-sm">
+									<div class="flex items-start justify-between gap-3">
+										<div class="space-y-1">
+											<div class="flex items-center gap-2 text-base font-medium capitalize">
+												<span>{siteLabels[site]}</span>
+												{#if site === 'torrentbot'}
+													<Badge variant="destructive">비활성</Badge>
+												{/if}
+											</div>
+											<p class="text-xs text-muted-foreground">
+												{state.message ?? '대기 중'}
+											</p>
+										</div>
+										<div class="flex flex-col items-end gap-1">
+											<Badge variant={statusBadgeVariants[state.status]}>
+												{statusLabels[state.status]}
+											</Badge>
+											<Button
+												size="sm"
+												variant="default"
+												disabled={manualLoading}
+												onclick={() => openManualDialog(site)}
+											>
+												정적 HTML 업로드
+											</Button>
+										</div>
+									</div>
+									<p class="text-xs text-muted-foreground">
+										최신 수집: {formatDateTime(state.lastRun)}
+									</p>
+									<div class="grid gap-1">
+										<label
+											class="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground"
+											for={`scraper-target-${site}`}
+										>
+											타겟 URL
+										</label>
+										<div class="flex gap-2">
+											<input
+												id={`scraper-target-${site}`}
+												type="text"
+												class="w-full rounded-md border bg-background px-2 py-1 text-sm focus-visible:border-primary focus-visible:outline-none"
+												value={scraperTargets[site]}
+												oninput={(event) => setScraperTarget(site, event.currentTarget.value)}
+											/>
+											<Button size="sm" variant="outline" onclick={() => openTargetPage(site)}>
+												페이지 열기
+											</Button>
+										</div>
+									</div>
+								</div>
+							{/each}
+						</div>
+					</div>
 				</div>
 			{:else}
 				<p class="text-xs text-muted-foreground">
@@ -667,3 +803,66 @@ async function resetData() {
 		</section>
 	</div>
 </div>
+
+{#if manualDialogOpen}
+	<div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+		<div class="w-full max-w-2xl rounded-lg bg-card p-4 shadow-lg">
+			<div class="mb-3 flex items-center justify-between">
+				<div>
+					<h3 class="text-lg font-semibold">정적 HTML 업로드</h3>
+					<p class="text-sm text-muted-foreground">
+						kone / twidouga / torrentbot 정적 HTML을 붙여 넣어 수동 수집합니다.
+					</p>
+				</div>
+				<Button variant="ghost" size="sm" onclick={closeManualDialog} disabled={manualLoading}>
+					닫기
+				</Button>
+			</div>
+
+			<div class="mb-3 grid gap-3 sm:grid-cols-[160px_1fr]">
+				<div class="space-y-2">
+					<label class="text-xs uppercase tracking-[0.2em] text-muted-foreground">사이트</label>
+					<select
+						class="w-full rounded-md border bg-background px-2 py-1 text-sm"
+						bind:value={manualSite}
+						disabled={manualLoading}
+					>
+						{#each manualSupportedSites as site}
+							<option value={site}>{siteLabels[site]}</option>
+						{/each}
+					</select>
+					<div class="text-[11px] text-muted-foreground space-y-1">
+						<p>- kone: @static/kone_example.html</p>
+						<p>- twidouga: @static/twdouga_example.html</p>
+						<p>- torrentbot: 파서 준비 중 (전송 시 실패 응답)</p>
+					</div>
+				</div>
+				<div class="space-y-2">
+					<label class="text-xs uppercase tracking-[0.2em] text-muted-foreground">
+						정적 HTML
+					</label>
+					<textarea
+						class="h-64 w-full resize-none rounded-md border bg-background p-2 text-sm font-mono"
+						placeholder="여기에 페이지 소스 전체를 붙여넣으세요 (Ctrl+A, Ctrl+C)"
+						bind:value={manualHtml}
+						disabled={manualLoading}
+					></textarea>
+					{#if manualMessage}
+						<p class="text-sm text-destructive">{manualMessage}</p>
+					{/if}
+				</div>
+			</div>
+
+			<div class="flex justify-end gap-2">
+				<Button variant="outline" onclick={closeManualDialog} disabled={manualLoading}>취소</Button>
+				<Button
+					variant="default"
+					onclick={submitManualHtml}
+					disabled={manualLoading || !manualHtml.trim()}
+				>
+					{manualLoading ? '업로드 중...' : '업로드'}
+				</Button>
+			</div>
+		</div>
+	</div>
+{/if}
