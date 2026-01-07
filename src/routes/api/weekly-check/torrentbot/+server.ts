@@ -30,4 +30,3 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 export const GET: RequestHandler = async () => {
 	return json({ message: '미구현 (정적 HTML 파서 준비 필요)' });
 };
-

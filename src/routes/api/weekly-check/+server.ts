@@ -16,10 +16,19 @@ export const PATCH: RequestHandler = async ({ request, locals }) => {
 	const db = locals.db;
 	if (!db) throw error(500, 'Database not available');
 
-	const body = await request.json();
+	const body = (await request.json().catch(() => null)) as unknown;
+
+	const isTargetUpdate = (value: unknown): value is { site: string; targetUrl: string } => {
+		return (
+			typeof value === 'object' &&
+			value !== null &&
+			typeof (value as { site?: unknown }).site === 'string' &&
+			typeof (value as { targetUrl?: unknown }).targetUrl === 'string'
+		);
+	};
 
 	// Update scraper target URL
-	if (typeof body?.site === 'string' && typeof body?.targetUrl === 'string') {
+	if (isTargetUpdate(body)) {
 		const [state] = await db
 			.insert(weekly_check_scraper_state)
 			.values({
@@ -44,12 +53,20 @@ export const PATCH: RequestHandler = async ({ request, locals }) => {
 
 	// Update post flags (liked/read)
 	const idNumber =
-		typeof body?.id === 'number' ? body.id : typeof body?.id === 'string' ? Number(body.id) : null;
+		typeof (body as { id?: unknown })?.id === 'number'
+			? (body as { id: number }).id
+			: typeof (body as { id?: unknown })?.id === 'string'
+				? Number((body as { id: string }).id)
+				: null;
 
 	if (idNumber !== null && Number.isFinite(idNumber)) {
 		const updates: Partial<typeof weekly_check_posts.$inferInsert> = {};
-		if ('liked' in body) updates.liked = Boolean(body.liked);
-		if ('read' in body) updates.read = Boolean(body.read);
+		if (typeof (body as { liked?: unknown })?.liked !== 'undefined') {
+			updates.liked = Boolean((body as { liked?: unknown }).liked);
+		}
+		if (typeof (body as { read?: unknown })?.read !== 'undefined') {
+			updates.read = Boolean((body as { read?: unknown }).read);
+		}
 
 		if (!Object.keys(updates).length) {
 			throw error(400, 'No updates provided');

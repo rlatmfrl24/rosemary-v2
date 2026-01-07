@@ -56,7 +56,7 @@
 	type RawPost = LoadData['posts'][number];
 	type RawScraperState = LoadData['scraperStates'][number];
 
-	type SiteKey = 'kissav' | 'missav' | 'twidouga' | 'kone' | 'torrentbot';
+	type SiteKey = 'kissav' | 'missav' | 'twidouga' | 'torrentbot' | 'kone';
 	type SiteFilter = 'all' | SiteKey;
 	type ReadFilter = 'all' | 'read' | 'unread';
 
@@ -91,43 +91,43 @@
 		kissav: 'kissav',
 		missav: 'missav',
 		twidouga: 'twidouga',
-		kone: 'kone',
-		torrentbot: 'torrentbot'
+		torrentbot: 'torrentbot',
+		kone: 'kone'
 	};
 
-	const siteOrder: SiteKey[] = ['kissav', 'missav', 'twidouga', 'kone', 'torrentbot'];
-	const manualSupportedSites: SiteKey[] = ['twidouga', 'kone', 'torrentbot'];
+	const siteOrder: SiteKey[] = ['kissav', 'missav', 'twidouga', 'torrentbot', 'kone'];
+	const manualSupportedSites: SiteKey[] = ['kone', 'twidouga', 'torrentbot'];
 	const autoSites: SiteKey[] = siteOrder.filter((s) => !manualSupportedSites.includes(s));
 
 	const defaultScraperTargets: Record<SiteKey, string> = {
 		kissav: 'https://kissjav.com/most-popular/?sort_by=video_viewed_week',
 		missav: 'https://missav123.to/ko/all?sort=weekly_views',
 		twidouga: 'https://twidouga.com/trending',
-		kone: 'https://kone.com/front',
-		torrentbot: 'https://torrentbot.com/feed'
+		torrentbot: 'https://torrentbot.com/feed',
+		kone: 'https://kone.gg/s/pornvideo'
 	};
 
 	const defaultScraperStates: Record<SiteKey, ScraperState> = {
 		kissav: { status: 'idle', message: '대기 중' },
 		missav: { status: 'idle', message: '대기 중' },
 		twidouga: { status: 'unsupported', message: 'HTTP 수집 미지원' },
-		kone: { status: 'unsupported', message: 'HTTP 수집 미지원' },
-		torrentbot: { status: 'unsupported', message: 'HTTP 수집 미지원' }
+		torrentbot: { status: 'unsupported', message: 'HTTP 수집 미지원' },
+		kone: { status: 'idle', message: '대기 중' }
 	};
 
 	const { data } = $props<{ data: LoadData }>();
 
-let rows = $state<Post[]>(normalizePosts(data.posts));
-let scraperStates = $state<Record<SiteKey, ScraperState>>(
-	normalizeScraperStates(normalizeScraperRows(data.scraperStates))
-);
+	let rows = $state<Post[]>(normalizePosts(data.posts));
+	let scraperStates = $state<Record<SiteKey, ScraperState>>(
+		normalizeScraperStates(normalizeScraperRows(data.scraperStates))
+	);
 	let scraperTargets = $state<Record<SiteKey, string>>({ ...defaultScraperTargets });
 	let siteFilter = $state<SiteFilter>('all');
 	let readFilter = $state<ReadFilter>('all');
 	let showScraperPanel = $state(true);
 	let showThumbnails = $state(true);
 	let manualDialogOpen = $state(false);
-	let manualSite = $state<SiteKey>('twidouga');
+	let manualSite = $state<SiteKey>('kone');
 	let manualHtml = $state('');
 	let manualLoading = $state(false);
 	let manualMessage = $state<string | null>(null);
@@ -297,25 +297,25 @@ let scraperStates = $state<Record<SiteKey, ScraperState>>(
 		showThumbnails = !showThumbnails;
 	}
 
-async function resetData() {
-	try {
-		const res = await fetch('/api/weekly-check', { method: 'DELETE' });
-		if (!res.ok) throw new Error(`reset failed: ${res.status}`);
+	async function resetData() {
+		try {
+			const res = await fetch('/api/weekly-check', { method: 'DELETE' });
+			if (!res.ok) throw new Error(`reset failed: ${res.status}`);
 
-		rows = [];
-		scraperStates = { ...defaultScraperStates };
-		scraperTargets = { ...defaultScraperTargets };
-		siteFilter = 'all';
-		readFilter = 'all';
-		showScraperPanel = true;
-		showThumbnails = true;
-		lastUpdated = null;
+			rows = [];
+			scraperStates = { ...defaultScraperStates };
+			scraperTargets = { ...defaultScraperTargets };
+			siteFilter = 'all';
+			readFilter = 'all';
+			showScraperPanel = true;
+			showThumbnails = true;
+			lastUpdated = null;
 
-		await refetchData();
-	} catch (error) {
-		console.error('weekly-check: reset failed', error);
+			await refetchData();
+		} catch (error) {
+			console.error('weekly-check: reset failed', error);
+		}
 	}
-}
 
 	async function refetchData() {
 		try {
@@ -429,7 +429,6 @@ async function resetData() {
 			kissav: '/api/weekly-check/kissav',
 			missav: '/api/weekly-check/missav',
 			twidouga: null,
-			kone: null,
 			torrentbot: null
 		};
 
@@ -472,11 +471,17 @@ async function resetData() {
 				<p class="text-xs text-muted-foreground">
 					마지막 업데이트: {lastUpdated ? formatDateTime(lastUpdated) : 'N/A'} (목업 기준)
 				</p>
-				<div class="rounded-md border bg-muted/40 p-3 text-xs text-muted-foreground space-y-1">
+		<div class="rounded-md border bg-muted/40 p-3 text-xs text-muted-foreground space-y-1">
 					<p class="font-semibold text-foreground">정적 HTML 빠른 추출 방법</p>
-					<p>1) 브라우저에서 해당 페이지 열기 → F12 → Console에 `copy(document.documentElement.outerHTML)` 입력</p>
+					<p>
+						1) 브라우저에서 해당 페이지 열기 → F12 → Console에
+						`copy(document.documentElement.outerHTML)` 입력
+					</p>
 					<p>2) 또는 Ctrl+S로 html 저장 후 메모장 등으로 열어 전체 복사</p>
 					<p>3) 광고/추가 스크립트는 무시 가능, 본문 리스트가 포함된 전체 HTML을 붙여넣으세요.</p>
+					<p class="text-[11px] text-muted-foreground">
+						샘플: <code>@static/kone.html</code>, <code>@static/twdouga_example.html</code>
+					</p>
 				</div>
 			</div>
 
@@ -517,7 +522,9 @@ async function resetData() {
 						<div class="grid gap-3 sm:grid-cols-1 lg:grid-cols-2">
 							{#each autoSites as site}
 								{@const state = scraperStates[site]}
-								<div class="flex flex-col gap-2 rounded-md border bg-background px-3 py-3 text-sm shadow-sm">
+								<div
+									class="flex flex-col gap-2 rounded-md border bg-background px-3 py-3 text-sm shadow-sm"
+								>
 									<div class="flex items-start justify-between gap-3">
 										<div class="space-y-1">
 											<div class="flex items-center gap-2 text-base font-medium capitalize">
@@ -573,14 +580,16 @@ async function resetData() {
 						<div class="mb-2 flex items-center justify-between gap-2">
 							<div class="flex items-center gap-2">
 								<h3 class="text-sm font-semibold">수동 수집 (정적 HTML 붙여넣기)</h3>
-								<Badge variant="outline" class="text-[11px]">twidouga / kone / torrentbot</Badge>
+								<Badge variant="outline" class="text-[11px]">kone / twidouga / torrentbot</Badge>
 							</div>
 							<p class="text-xs text-muted-foreground">타겟 페이지 열기 → 소스 복사 → 업로드</p>
 						</div>
 						<div class="grid gap-3 sm:grid-cols-1 lg:grid-cols-3">
 							{#each manualSupportedSites as site}
 								{@const state = scraperStates[site]}
-								<div class="flex flex-col gap-2 rounded-md border bg-background px-3 py-3 text-sm shadow-sm">
+								<div
+									class="flex flex-col gap-2 rounded-md border bg-background px-3 py-3 text-sm shadow-sm"
+								>
 									<div class="flex items-start justify-between gap-3">
 										<div class="space-y-1">
 											<div class="flex items-center gap-2 text-base font-medium capitalize">
@@ -811,7 +820,7 @@ async function resetData() {
 				<div>
 					<h3 class="text-lg font-semibold">정적 HTML 업로드</h3>
 					<p class="text-sm text-muted-foreground">
-						kone / twidouga / torrentbot 정적 HTML을 붙여 넣어 수동 수집합니다.
+						twidouga / torrentbot 정적 HTML을 붙여 넣어 수동 수집합니다.
 					</p>
 				</div>
 				<Button variant="ghost" size="sm" onclick={closeManualDialog} disabled={manualLoading}>
@@ -821,8 +830,11 @@ async function resetData() {
 
 			<div class="mb-3 grid gap-3 sm:grid-cols-[160px_1fr]">
 				<div class="space-y-2">
-					<label class="text-xs uppercase tracking-[0.2em] text-muted-foreground">사이트</label>
+					<label for="manual-site" class="text-xs uppercase tracking-[0.2em] text-muted-foreground">
+						사이트
+					</label>
 					<select
+						id="manual-site"
 						class="w-full rounded-md border bg-background px-2 py-1 text-sm"
 						bind:value={manualSite}
 						disabled={manualLoading}
@@ -832,16 +844,17 @@ async function resetData() {
 						{/each}
 					</select>
 					<div class="text-[11px] text-muted-foreground space-y-1">
-						<p>- kone: @static/kone_example.html</p>
+						<p>- kone: @static/kone.html</p>
 						<p>- twidouga: @static/twdouga_example.html</p>
 						<p>- torrentbot: 파서 준비 중 (전송 시 실패 응답)</p>
 					</div>
 				</div>
 				<div class="space-y-2">
-					<label class="text-xs uppercase tracking-[0.2em] text-muted-foreground">
+					<label for="manual-html" class="text-xs uppercase tracking-[0.2em] text-muted-foreground">
 						정적 HTML
 					</label>
 					<textarea
+						id="manual-html"
 						class="h-64 w-full resize-none rounded-md border bg-background p-2 text-sm font-mono"
 						placeholder="여기에 페이지 소스 전체를 붙여넣으세요 (Ctrl+A, Ctrl+C)"
 						bind:value={manualHtml}

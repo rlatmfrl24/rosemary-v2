@@ -57,14 +57,12 @@ export function parseTwidouga(html: string): TwidougaPost[] {
 
 		// 랭크 텍스트는 바로 앞의 텍스트 노드/IMG 조합에 포함되어 있어 간단히 fallback 제목을 구성한다.
 		const rankText =
-			container
-				.prevAll()
-				.slice(0, 4)
-				.text()
-				.replace(/\s+/g, ' ')
-				.trim() || `rank-${index + 1}`;
+			container.prevAll().slice(0, 4).text().replace(/\s+/g, ' ').trim() || `rank-${index + 1}`;
 
-		const savesText = tweetLink.parent().text().match(/(\d+)\s*회저장/);
+		const savesText = tweetLink
+			.parent()
+			.text()
+			.match(/(\d+)\s*회저장/);
 		const savesLabel = savesText ? `${savesText[1]}회 저장` : '';
 
 		const titleParts = [rankText];
@@ -134,4 +132,3 @@ export async function saveTwidougaState(
 			}
 		});
 }
-

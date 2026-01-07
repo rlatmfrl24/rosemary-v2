@@ -11,9 +11,14 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 
 	let targetUrl = DEFAULT_TARGET;
 	try {
-		const body = await request.json().catch(() => ({}));
-		if (typeof body?.targetUrl === 'string' && body.targetUrl.trim()) {
-			targetUrl = body.targetUrl.trim();
+		const body = (await request.json().catch(() => null)) as unknown;
+		if (
+			typeof body === 'object' &&
+			body !== null &&
+			typeof (body as { targetUrl?: unknown }).targetUrl === 'string' &&
+			(body as { targetUrl: string }).targetUrl.trim()
+		) {
+			targetUrl = (body as { targetUrl: string }).targetUrl.trim();
 		}
 	} catch {
 		// ignore parse errors, keep default
