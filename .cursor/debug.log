@@ -1,0 +1,8 @@
+{"sessionId":"debug-session","runId":"pre-fix","hypothesisId":"H1","location":"torrentbot.ts:parseTorrentbot","message":"parse start","data":{"htmlLength":103070},"timestamp":1767763330313}
+{"sessionId":"debug-session","runId":"pre-fix","hypothesisId":"H3","location":"torrentbot.ts:parseTorrentbot","message":"foreign movie anchors detected","data":{"count":10},"timestamp":1767763330319}
+{"sessionId":"debug-session","runId":"pre-fix","hypothesisId":"H4","location":"torrentbot.ts:parseTorrentbot","message":"parse complete","data":{"total":30,"first":{"sourceId":"520409","title":"군산대 할카스 보지에 점있는 녀 3V19P","postedAt":"2025-12-11"}},"timestamp":1767763330320}
+{"sessionId":"debug-session","runId":"pre-fix","hypothesisId":"H2","location":"torrentbot.ts:parseTorrentbot","message":"main table rows detected","data":{"count":20},"timestamp":1767763330316}
+{"sessionId":"debug-session","runId":"run1","hypothesisId":"H1","location":"kone.ts:parseKone","message":"parse start","data":{"htmlLength":386693},"timestamp":1767763767298}
+{"sessionId":"debug-session","runId":"run1","hypothesisId":"H3","location":"kone.ts:parseKone","message":"parse success","data":{"count":30,"first":{"sourceId":"bdkM9S0d6KLWT3bOq_K5Sb","title":"펠라재팬 (273.5g)"}},"timestamp":1767763767346}
+{"sessionId":"debug-session","runId":"run1","hypothesisId":"H3","location":"kone/+server.ts:POST","message":"api parsed count","data":{"count":30},"timestamp":1767763767347}
+{"sessionId":"debug-session","runId":"run1","hypothesisId":"H6","location":"kone.ts:parseKone","message":"anchor nodes found","data":{"count":30},"timestamp":1767763767337}

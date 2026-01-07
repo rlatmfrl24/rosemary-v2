@@ -1,5 +1,6 @@
 import { error, json, type RequestHandler } from '@sveltejs/kit';
 import { parseKone, saveKonePosts, saveKoneState } from '$lib/server/scraper/kone';
+import { nowEpochSeconds } from '$lib/server/scraper/utils';
 
 export const POST: RequestHandler = async ({ request, locals }) => {
 	const db = locals.db;
@@ -15,31 +16,18 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 
 	if (!html.trim()) throw error(400, 'html is required');
 
+	const timestamp = nowEpochSeconds();
+
 	await saveKoneState(db, {
 		status: 'running',
 		message: '정적 HTML 파싱 중',
 		targetUrl,
-		lastRun: Math.floor(Date.now() / 1000)
+		lastRun: timestamp
 	});
 
 	try {
 		const posts = parseKone(html);
 		console.info('[kone api] parsed count', posts.length);
-		// #region agent log
-		fetch('http://127.0.0.1:7243/ingest/16f07aa8-3f43-4715-b7c6-4ddfc723f257', {
-			method: 'POST',
-			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify({
-				sessionId: 'debug-session',
-				runId: 'run1',
-				hypothesisId: 'H3',
-				location: 'kone/+server.ts:POST',
-				message: 'api parsed count',
-				data: { count: posts.length },
-				timestamp: Date.now()
-			})
-		}).catch(() => {});
-		// #endregion
 		if (!posts.length) throw new Error('파싱 결과가 없습니다');
 
 		await saveKonePosts(posts, db);
@@ -47,7 +35,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			status: 'success',
 			message: `성공 (신규 ${posts.length}건)`,
 			targetUrl,
-			lastRun: Math.floor(Date.now() / 1000)
+			lastRun: timestamp
 		});
 
 		return json({ count: posts.length });

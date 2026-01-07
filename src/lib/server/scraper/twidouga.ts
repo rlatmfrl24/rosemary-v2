@@ -1,15 +1,12 @@
 import * as cheerio from 'cheerio';
-import { weekly_check_posts, weekly_check_scraper_state } from '$lib/server/db/schema';
-import { eq, sql } from 'drizzle-orm';
+import {
+	normalizeSpaces,
+	upsertScraperState,
+	upsertWeeklyPosts,
+	type WeeklyPostInput
+} from './utils';
 
-export type TwidougaPost = {
-	site: 'twidouga';
-	sourceId: string;
-	title: string;
-	url?: string | null;
-	thumbnail?: string | null;
-	postedAt?: string | null;
-};
+export type TwidougaPost = WeeklyPostInput & { site: 'twidouga' };
 
 function extractTweetId(href?: string | null): string | null {
 	if (!href) return null;
@@ -59,10 +56,7 @@ export function parseTwidouga(html: string): TwidougaPost[] {
 		const rankText =
 			container.prevAll().slice(0, 4).text().replace(/\s+/g, ' ').trim() || `rank-${index + 1}`;
 
-		const savesText = tweetLink
-			.parent()
-			.text()
-			.match(/(\d+)\s*회저장/);
+		const savesText = normalizeSpaces(tweetLink.parent().text()).match(/(\d+)\s*회저장/);
 		const savesLabel = savesText ? `${savesText[1]}회 저장` : '';
 
 		const titleParts = [rankText];
@@ -83,52 +77,17 @@ export function parseTwidouga(html: string): TwidougaPost[] {
 }
 
 export async function saveTwidougaPosts(posts: TwidougaPost[], db: App.Locals['db']) {
-	if (!db) throw new Error('Database not available');
-
-	for (const post of posts) {
-		await db
-			.insert(weekly_check_posts)
-			.values({
-				site: post.site,
-				sourceId: post.sourceId,
-				title: post.title,
-				url: post.url ?? undefined,
-				thumbnail: post.thumbnail ?? undefined,
-				postedAt: post.postedAt ?? undefined
-			})
-			.onConflictDoUpdate({
-				target: [weekly_check_posts.site, weekly_check_posts.sourceId],
-				set: {
-					title: post.title,
-					url: post.url ?? weekly_check_posts.url,
-					thumbnail: post.thumbnail,
-					postedAt: post.postedAt ?? sql`NULL`
-				}
-			});
-	}
+	await upsertWeeklyPosts(db, posts);
 }
 
 export async function saveTwidougaState(
 	db: App.Locals['db'],
-	state: Partial<typeof weekly_check_scraper_state.$inferInsert>
+	state: Partial<{
+		targetUrl?: string;
+		status?: string;
+		message?: string | null;
+		lastRun?: number | null;
+	}>
 ) {
-	if (!db) throw new Error('Database not available');
-	await db
-		.insert(weekly_check_scraper_state)
-		.values({
-			site: 'twidouga',
-			targetUrl: state.targetUrl ?? 'manual-html',
-			status: state.status ?? 'idle',
-			message: state.message,
-			lastRun: state.lastRun ?? sql`(strftime('%s', 'now'))`
-		})
-		.onConflictDoUpdate({
-			target: weekly_check_scraper_state.site,
-			set: {
-				targetUrl: state.targetUrl ?? weekly_check_scraper_state.targetUrl,
-				status: state.status ?? weekly_check_scraper_state.status,
-				message: state.message ?? weekly_check_scraper_state.message,
-				lastRun: state.lastRun ?? weekly_check_scraper_state.lastRun
-			}
-		});
+	await upsertScraperState(db, 'twidouga', state);
 }

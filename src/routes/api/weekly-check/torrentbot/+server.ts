@@ -1,32 +1,51 @@
 import { error, json, type RequestHandler } from '@sveltejs/kit';
-import { weekly_check_scraper_state } from '$lib/server/db/schema';
-import { sql } from 'drizzle-orm';
+import {
+	parseTorrentbot,
+	saveTorrentbotPosts,
+	saveTorrentbotState
+} from '$lib/server/scraper/torrentbot';
 
 export const POST: RequestHandler = async ({ request, locals }) => {
 	const db = locals.db;
 	if (!db) throw error(500, 'Database not available');
 
-	await db
-		.insert(weekly_check_scraper_state)
-		.values({
-			site: 'torrentbot',
-			targetUrl: 'manual-html',
-			status: 'error',
-			message: '정적 HTML 파서 미구현',
-			lastRun: sql`(strftime('%s', 'now'))`
-		})
-		.onConflictDoUpdate({
-			target: weekly_check_scraper_state.site,
-			set: {
-				status: 'error',
-				message: '정적 HTML 파서 미구현',
-				lastRun: sql`(strftime('%s', 'now'))`
-			}
+	const body = (await request.json().catch(() => null)) as unknown;
+	const html =
+		typeof (body as { html?: unknown })?.html === 'string' ? (body as { html: string }).html : '';
+	const targetUrl =
+		typeof (body as { targetUrl?: unknown })?.targetUrl === 'string'
+			? (body as { targetUrl: string }).targetUrl
+			: 'manual-html';
+
+	if (!html.trim()) throw error(400, 'html is required');
+
+	await saveTorrentbotState(db, {
+		status: 'running',
+		message: '정적 HTML 파싱 중',
+		targetUrl,
+		lastRun: Math.floor(Date.now() / 1000)
+	});
+
+	try {
+		const posts = parseTorrentbot(html);
+		if (!posts.length) throw new Error('파싱 결과가 없습니다');
+
+		await saveTorrentbotPosts(posts, db);
+		await saveTorrentbotState(db, {
+			status: 'success',
+			message: `성공 (신규 ${posts.length}건)`,
+			targetUrl,
+			lastRun: Math.floor(Date.now() / 1000)
 		});
 
-	throw error(400, 'torrentbot 정적 HTML 파서가 아직 준비되지 않았습니다.');
-};
-
-export const GET: RequestHandler = async () => {
-	return json({ message: '미구현 (정적 HTML 파서 준비 필요)' });
+		return json({ count: posts.length });
+	} catch (err) {
+		await saveTorrentbotState(db, {
+			status: 'error',
+			message: err instanceof Error ? err.message : 'unknown error',
+			targetUrl,
+			lastRun: Math.floor(Date.now() / 1000)
+		});
+		throw error(400, err instanceof Error ? err.message : 'parse failed');
+	}
 };
