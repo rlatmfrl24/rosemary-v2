@@ -1,3 +1,44 @@
+<script lang="ts" module>
+	type LoadData = {
+		posts: {
+			id: number;
+			site: string;
+			sourceId: string;
+			title: string;
+			url: string | null;
+			thumbnail: string | null;
+			postedAt: string | null;
+			liked: number | boolean;
+			read: number | boolean;
+		}[];
+		scraperStates: {
+			id: number;
+			site: string;
+			targetUrl: string;
+			status: string;
+			message: string | null;
+			lastRun: number | null;
+		}[];
+	};
+
+	export const load = async ({ fetch }: { fetch: typeof globalThis.fetch }): Promise<LoadData> => {
+		try {
+			const res = await fetch('/api/weekly-check');
+			if (res.ok) {
+				const data = (await res.json()) as LoadData;
+				return {
+					posts: data.posts ?? [],
+					scraperStates: data.scraperStates ?? []
+				};
+			}
+		} catch (error) {
+			console.error('weekly-check: load failed', error);
+		}
+
+		return { posts: [], scraperStates: [] };
+	};
+</script>
+
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { Button } from '$lib/components/ui/button';
@@ -11,26 +52,40 @@
 		TableRow
 	} from '$lib/components/ui/table';
 
+	type LoadData = Awaited<ReturnType<typeof load>>;
+	type RawPost = LoadData['posts'][number];
+	type RawScraperState = LoadData['scraperStates'][number];
+
 	type SiteKey = 'kissav' | 'missav' | 'twidouga' | 'kone' | 'torrentbot';
+	type SiteFilter = 'all' | SiteKey;
+	type ReadFilter = 'all' | 'read' | 'unread';
 
 	type ScraperState = {
 		status: 'idle' | 'running' | 'success' | 'error' | 'unsupported';
 		lastRun?: Date;
 		message?: string;
+		targetUrl?: string;
 	};
 
 	type Post = {
-		id: string;
+		id: number;
 		site: SiteKey;
+		sourceId: string;
 		title: string;
-		thumbnail: string;
-		postedAt?: string;
-		likes: number;
+		url: string | null;
+		thumbnail: string | null;
+		postedAt: string | null;
 		liked: boolean;
 		read: boolean;
 	};
-
-	type SiteFilter = 'all' | SiteKey;
+	type ScraperStateRow = {
+		id: number;
+		site: SiteKey;
+		targetUrl: string;
+		status: string;
+		message: string | null;
+		lastRun: number | null;
+	};
 
 	const siteLabels: Record<SiteKey, string> = {
 		kissav: 'kissav',
@@ -42,169 +97,33 @@
 
 	const siteOrder: SiteKey[] = ['kissav', 'missav', 'twidouga', 'kone', 'torrentbot'];
 
-	const initialScraperStates = {
-		kissav: {
-			status: 'idle',
-			message: '대기 중',
-			lastRun: new Date(Date.now() - 1000 * 60 * 60 * 4)
-		},
-		missav: {
-			status: 'success',
-			message: '최근 성공',
-			lastRun: new Date(Date.now() - 1000 * 60 * 60 * 9)
-		},
-		twidouga: {
-			status: 'idle',
-			message: '대기 중'
-		},
-		kone: {
-			status: 'error',
-			message: '최근 실패 (목업)',
-			lastRun: new Date(Date.now() - 1000 * 60 * 60 * 12)
-		},
-		torrentbot: {
-			status: 'unsupported',
-			message: 'HTTP 수집 미지원'
-		}
-	} satisfies Record<SiteKey, ScraperState>;
-
-	const initialScraperTargets: Record<SiteKey, string> = {
-		kissav: 'https://kissav.com/latest',
-		missav: 'https://missav.com/popular/week',
+	const defaultScraperTargets: Record<SiteKey, string> = {
+		kissav: 'https://kissjav.com/most-popular/?sort_by=video_viewed_week',
+		missav: 'https://missav123.to/ko/all?sort=weekly_views',
 		twidouga: 'https://twidouga.com/trending',
 		kone: 'https://kone.com/front',
 		torrentbot: 'https://torrentbot.com/feed'
 	};
 
-	const scraperTargetStorageKey = 'weekly-check-scraper-targets';
+	const defaultScraperStates: Record<SiteKey, ScraperState> = {
+		kissav: { status: 'idle', message: '대기 중' },
+		missav: { status: 'idle', message: '대기 중' },
+		twidouga: { status: 'unsupported', message: 'HTTP 수집 미지원' },
+		kone: { status: 'unsupported', message: 'HTTP 수집 미지원' },
+		torrentbot: { status: 'unsupported', message: 'HTTP 수집 미지원' }
+	};
 
-	const initialPosts: Post[] = [
-		{
-			id: 'kissav-1',
-			site: 'kissav',
-			title: '[KissAV] 1월 첫째주 인기: studio release highlight 모음',
-			thumbnail: 'https://placehold.co/160x100/0f172a/ffffff?text=kissav',
-			postedAt: '2026-01-05',
-			likes: 41,
-			liked: false,
-			read: false
-		},
-		{
-			id: 'kissav-2',
-			site: 'kissav',
-			title: '[KissAV] 고화질 직캠 베스트 5선',
-			thumbnail: 'https://placehold.co/160x100/1e293b/ffffff?text=kissav',
-			postedAt: '2026-01-04',
-			likes: 28,
-			liked: true,
-			read: true
-		},
-		{
-			id: 'missav-1',
-			site: 'missav',
-			title: '[MissAV] 프리미엄 랭킹 업데이트 (주간 탑 10)',
-			thumbnail: 'https://placehold.co/160x100/0ea5e9/ffffff?text=missav',
-			postedAt: '2026-01-06',
-			likes: 33,
-			liked: false,
-			read: false
-		},
-		{
-			id: 'missav-2',
-			site: 'missav',
-			title: '[MissAV] 인기 배우 합본 세트 할인 소식',
-			thumbnail: 'https://placehold.co/160x100/22c55e/0b1726?text=missav',
-			postedAt: '2026-01-03',
-			likes: 19,
-			liked: false,
-			read: false
-		},
-		{
-			id: 'twidouga-1',
-			site: 'twidouga',
-			title: '[Twidouga] 짧은 클립 모음 - SNS 바이럴',
-			thumbnail: 'https://placehold.co/160x100/f97316/0b1726?text=twidouga',
-			postedAt: '2026-01-02',
-			likes: 22,
-			liked: false,
-			read: false
-		},
-		{
-			id: 'twidouga-2',
-			site: 'twidouga',
-			title: '[Twidouga] 인기 태그 실시간 TOP 5',
-			thumbnail: 'https://placehold.co/160x100/f59e0b/0b1726?text=twidouga',
-			postedAt: '2026-01-01',
-			likes: 17,
-			liked: false,
-			read: true
-		},
-		{
-			id: 'kone-1',
-			site: 'kone',
-			title: '[Kone] 신규 시리즈 런칭 안내',
-			thumbnail: 'https://placehold.co/160x100/6366f1/ffffff?text=kone',
-			postedAt: '2026-01-04',
-			likes: 24,
-			liked: false,
-			read: false
-		},
-		{
-			id: 'kone-2',
-			site: 'kone',
-			title: '[Kone] 커뮤니티 추천 TOP',
-			thumbnail: 'https://placehold.co/160x100/312e81/ffffff?text=kone',
-			likes: 11,
-			liked: false,
-			read: false
-		},
-		{
-			id: 'torrentbot-1',
-			site: 'torrentbot',
-			title: '[TorrentBot] 자동 수집 비활성 상태 - 수동 확인 필요',
-			thumbnail: 'https://placehold.co/160x100/475569/ffffff?text=torrentbot',
-			likes: 5,
-			liked: false,
-			read: false
-		}
-	];
+	const { data } = $props<{ data: LoadData }>();
 
-	let rows = $state<Post[]>(structuredClone(initialPosts));
-	let showThumbnails = $state(true);
-	let scraperStates = $state<Record<SiteKey, ScraperState>>(structuredClone(initialScraperStates));
-	let scraperTargets = $state<Record<SiteKey, string>>(structuredClone(initialScraperTargets));
+let rows = $state<Post[]>(normalizePosts(data.posts));
+let scraperStates = $state<Record<SiteKey, ScraperState>>(
+	normalizeScraperStates(normalizeScraperRows(data.scraperStates))
+);
+	let scraperTargets = $state<Record<SiteKey, string>>({ ...defaultScraperTargets });
 	let siteFilter = $state<SiteFilter>('all');
+	let readFilter = $state<ReadFilter>('all');
 	let showScraperPanel = $state(true);
-
-	function persistScraperTargets(targets: Record<SiteKey, string>) {
-		if (typeof window === 'undefined') return;
-		window.localStorage.setItem(scraperTargetStorageKey, JSON.stringify(targets));
-	}
-
-	onMount(() => {
-		if (typeof window === 'undefined') return;
-		const stored = window.localStorage.getItem(scraperTargetStorageKey);
-		if (!stored) return;
-
-		try {
-			const parsed = JSON.parse(stored);
-			if (!parsed || typeof parsed !== 'object') return;
-
-			const updates: Partial<Record<SiteKey, string>> = {};
-			for (const site of siteOrder) {
-				const value = parsed[site];
-				if (typeof value === 'string') {
-					updates[site] = value;
-				}
-			}
-
-			if (Object.keys(updates).length) {
-				scraperTargets = { ...scraperTargets, ...updates };
-			}
-		} catch (error) {
-			console.error('weekly-check: scraper targets load failed', error);
-		}
-	});
+	let showThumbnails = $state(true);
 
 	const statusLabels: Record<ScraperState['status'], string> = {
 		idle: '대기',
@@ -239,73 +158,251 @@
 	});
 
 	const filteredRows = $derived.by((): Post[] =>
-		rows.filter((row) => siteFilter === 'all' || row.site === siteFilter)
+		rows.filter((row) => {
+			if (siteFilter !== 'all' && row.site !== siteFilter) return false;
+			if (readFilter === 'read' && !row.read) return false;
+			if (readFilter === 'unread' && row.read) return false;
+			return true;
+		})
 	);
+
+	const readStatusSummary = $derived.by(() => {
+		const total = rows.length;
+		const read = rows.filter((row) => row.read).length;
+		return {
+			read,
+			unread: total - read
+		};
+	});
+
+	$effect(() => {
+		scraperTargets = deriveTargets(scraperStates);
+	});
+
+	onMount(() => {
+		// 클라이언트에서 최신 데이터로 동기화
+		void refetchData();
+	});
+
+	function isSiteKey(value: string): value is SiteKey {
+		return siteOrder.includes(value as SiteKey);
+	}
+
+	function toDate(value?: number | null) {
+		if (!value) return undefined;
+		return new Date(value * 1000);
+	}
+
+	function normalizeScraperStates(list: ScraperStateRow[] = []): Record<SiteKey, ScraperState> {
+		const result: Record<SiteKey, ScraperState> = { ...defaultScraperStates };
+
+		for (const row of list) {
+			if (!isSiteKey(row.site)) continue;
+			result[row.site] = {
+				status: coerceStatus(row.status),
+				message: row.message ?? defaultScraperStates[row.site].message,
+				lastRun: toDate(row.lastRun),
+				targetUrl: row.targetUrl ?? defaultScraperTargets[row.site]
+			};
+		}
+
+		return result;
+	}
+
+	function coerceStatus(value: string): ScraperState['status'] {
+		if (
+			value === 'running' ||
+			value === 'success' ||
+			value === 'error' ||
+			value === 'unsupported'
+		) {
+			return value;
+		}
+		return 'idle';
+	}
+
+	function normalizePosts(list: LoadData['posts'] = []): Post[] {
+		return list
+			.filter((post): post is RawPost => isSiteKey(post.site))
+			.map((post) => ({
+				id: post.id,
+				site: post.site as SiteKey,
+				sourceId: post.sourceId,
+				title: post.title,
+				url: post.url ?? null,
+				thumbnail: post.thumbnail ?? null,
+				postedAt: post.postedAt ?? null,
+				liked: Boolean(post.liked),
+				read: Boolean(post.read)
+			}));
+	}
+
+	function normalizeScraperRows(list: LoadData['scraperStates'] = []): ScraperStateRow[] {
+		return list
+			.filter((row): row is RawScraperState => isSiteKey(row.site))
+			.map((row) => ({
+				id: row.id,
+				site: row.site as SiteKey,
+				targetUrl: row.targetUrl,
+				status: row.status,
+				message: row.message,
+				lastRun: row.lastRun
+			}));
+	}
+
+	function deriveTargets(states: Record<SiteKey, ScraperState>): Record<SiteKey, string> {
+		const result = { ...defaultScraperTargets };
+		for (const site of siteOrder) {
+			const value = states[site]?.targetUrl;
+			if (value) result[site] = value;
+		}
+		return result;
+	}
 
 	function formatDateTime(date?: Date | null) {
 		if (!date) return '없음';
 		return dateTimeFormatter.format(date);
 	}
 
-	function formatPostedAt(value?: string) {
+	function formatPostedAt(value?: string | null) {
 		return value ?? '미상';
+	}
+
+	function navigateToUrl(url?: string | null) {
+		if (!url) return;
+		if (typeof window === 'undefined') return;
+		window.open(url, '_blank', 'noreferrer');
+	}
+
+	function getThumbnail(site: SiteKey, value?: string | null) {
+		if (value && value.trim()) return value;
+		return `https://placehold.co/160x100/0f172a/ffffff?text=${siteLabels[site]}`;
 	}
 
 	function toggleThumbnails() {
 		showThumbnails = !showThumbnails;
 	}
 
-	function resetMocks() {
-		rows = structuredClone(initialPosts);
-		scraperStates = structuredClone(initialScraperStates);
-		showThumbnails = true;
+async function resetData() {
+	try {
+		const res = await fetch('/api/weekly-check', { method: 'DELETE' });
+		if (!res.ok) throw new Error(`reset failed: ${res.status}`);
+
+		rows = [];
+		scraperStates = { ...defaultScraperStates };
+		scraperTargets = { ...defaultScraperTargets };
 		siteFilter = 'all';
-		scraperTargets = structuredClone(initialScraperTargets);
+		readFilter = 'all';
 		showScraperPanel = true;
-		persistScraperTargets(scraperTargets);
+		showThumbnails = true;
+		lastUpdated = null;
+
+		await refetchData();
+	} catch (error) {
+		console.error('weekly-check: reset failed', error);
+	}
+}
+
+	async function refetchData() {
+		try {
+			const res = await fetch('/api/weekly-check');
+			if (!res.ok) throw new Error(`fetch failed: ${res.status}`);
+			const payload = (await res.json()) as LoadData;
+			rows = normalizePosts(payload.posts);
+			scraperStates = normalizeScraperStates(normalizeScraperRows(payload.scraperStates));
+			scraperTargets = deriveTargets(scraperStates);
+		} catch (error) {
+			console.error('weekly-check: refetch failed', error);
+		}
 	}
 
-	function toggleRead(id: string) {
-		rows = rows.map((row) => (row.id === id ? { ...row, read: !row.read } : row));
+	async function updatePost(id: number, updates: Partial<Pick<Post, 'liked' | 'read'>>) {
+		try {
+			const res = await fetch('/api/weekly-check', {
+				method: 'PATCH',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ id, ...updates })
+			});
+			if (!res.ok) throw new Error(`update failed: ${res.status}`);
+			const payload = (await res.json()) as { post?: Post };
+			const updated: Post | undefined = payload.post;
+			if (!updated) return;
+			rows = rows.map((row) => (row.id === updated.id ? { ...row, ...updated } : row));
+		} catch (error) {
+			console.error('weekly-check: post update failed', error);
+		}
 	}
 
-	function toggleLike(id: string) {
-		rows = rows.map((row) => (row.id === id ? { ...row, liked: !row.liked } : row));
+	async function toggleRead(id: number) {
+		const target = rows.find((row) => row.id === id);
+		if (!target) return;
+		const next = !target.read;
+		rows = rows.map((row) => (row.id === id ? { ...row, read: next } : row));
+		await updatePost(id, { read: next });
 	}
 
-	function setScraperTarget(site: SiteKey, value: string) {
-		const next = { ...scraperTargets, [site]: value };
-		scraperTargets = next;
-		persistScraperTargets(next);
+	async function toggleLike(id: number) {
+		const target = rows.find((row) => row.id === id);
+		if (!target) return;
+		const next = !target.liked;
+		rows = rows.map((row) => (row.id === id ? { ...row, liked: next } : row));
+		await updatePost(id, { liked: next });
+	}
+
+	async function setScraperTarget(site: SiteKey, value: string) {
+		scraperTargets = { ...scraperTargets, [site]: value };
+		try {
+			const res = await fetch('/api/weekly-check', {
+				method: 'PATCH',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ site, targetUrl: value })
+			});
+			if (!res.ok) throw new Error(`target update failed: ${res.status}`);
+			await refetchData();
+		} catch (error) {
+			console.error('weekly-check: target update failed', error);
+		}
 	}
 
 	function toggleScraperVisibility() {
 		showScraperPanel = !showScraperPanel;
 	}
 
-	function triggerScrape(site: SiteKey) {
+	async function triggerScrape(site: SiteKey) {
 		const current = scraperStates[site];
 		if (current.status === 'running' || current.status === 'unsupported') return;
+
+		const endpointMap: Record<SiteKey, string | null> = {
+			kissav: '/api/weekly-check/kissav',
+			missav: '/api/weekly-check/missav',
+			twidouga: null,
+			kone: null,
+			torrentbot: null
+		};
+
+		const endpoint = endpointMap[site];
+		if (!endpoint) return;
 
 		scraperStates = {
 			...scraperStates,
 			[site]: { ...current, status: 'running', message: '요청 중...' }
 		};
 
-		const duration = 900 + Math.floor(Math.random() * 800);
-		setTimeout(() => {
-			const success = Math.random() > 0.2;
-			const nextState: ScraperState = {
-				status: success ? 'success' : 'error',
-				lastRun: new Date(),
-				message: success ? '정상 완료 (목업)' : '실패 (모의 오류)'
-			};
-
+		try {
+			const res = await fetch(endpoint, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ targetUrl: scraperTargets[site] })
+			});
+			if (!res.ok) throw new Error(`scrape failed: ${res.status}`);
+			await refetchData();
+		} catch (error) {
+			console.error('weekly-check: scrape failed', error);
 			scraperStates = {
 				...scraperStates,
-				[site]: nextState
+				[site]: { ...current, status: 'error', message: '실패 (오류 발생)' }
 			};
-		}, duration);
+		}
 	}
 </script>
 
@@ -325,10 +422,11 @@
 			</div>
 
 			<div class="flex gap-2">
-				<Button variant="outline" size="sm" on:click={toggleThumbnails}>
+				<Button variant="outline" size="sm" onclick={toggleThumbnails}>
 					{showThumbnails ? '썸네일 숨기기' : '썸네일 보이기'}
 				</Button>
-				<Button variant="ghost" size="sm" on:click={resetMocks}>목업 초기화</Button>
+				<Button variant="ghost" size="sm" onclick={refetchData}>데이터 새로고침</Button>
+				<Button variant="ghost" size="sm" onclick={resetData}>데이터 초기화</Button>
 			</div>
 		</section>
 
@@ -341,10 +439,10 @@
 					</p>
 				</div>
 				<div class="flex items-center gap-2">
-					<Button variant="outline" size="sm" on:click={toggleScraperVisibility}>
+					<Button variant="outline" size="sm" onclick={toggleScraperVisibility}>
 						{showScraperPanel ? '스크래퍼 숨기기' : '스크래퍼 표시'}
 					</Button>
-					<Badge variant="outline">목업 · HTTP 없음</Badge>
+					<Badge variant="outline">DB 연동</Badge>
 				</div>
 			</div>
 			{#if showScraperPanel}
@@ -374,7 +472,7 @@
 										size="sm"
 										variant="ghost"
 										disabled={state.status === 'running' || state.status === 'unsupported'}
-										on:click={() => triggerScrape(site)}
+										onclick={() => triggerScrape(site)}
 									>
 										{state.status === 'running' ? '요청 중...' : '재수집'}
 									</Button>
@@ -429,8 +527,22 @@
 							{/each}
 						</select>
 					</label>
+					<label class="flex items-center gap-2 text-sm text-muted-foreground">
+						<span class="whitespace-nowrap">읽음 상태</span>
+						<select
+							class="rounded-md border bg-background px-2 py-1 text-sm"
+							bind:value={readFilter}
+						>
+							<option value="all">전체</option>
+							<option value="read">읽음</option>
+							<option value="unread">읽지 않음</option>
+						</select>
+					</label>
 					<p class="text-sm text-muted-foreground text-right">총 {filteredRows.length}건</p>
 				</div>
+				<p class="text-xs text-muted-foreground text-right">
+					읽음 {readStatusSummary.read} · 읽지 않음 {readStatusSummary.unread}
+				</p>
 			</div>
 
 			<Table>
@@ -450,7 +562,11 @@
 				<TableBody>
 					{#each filteredRows as row, index}
 						{@const state = scraperStates[row.site]}
-						<TableRow data-state={row.read ? 'selected' : undefined}>
+						<tr
+							data-state={row.read ? 'selected' : undefined}
+							class={`hover:bg-muted/50 data-[state=selected]:bg-muted border-b transition-colors ${row.url ? 'cursor-pointer' : ''}`}
+							onclick={() => navigateToUrl(row.url)}
+						>
 							<TableCell class="text-muted-foreground">{index + 1}</TableCell>
 							<TableCell>
 								<div class="flex flex-col gap-1">
@@ -461,15 +577,22 @@
 								</div>
 							</TableCell>
 							<TableCell>
-								<div class="space-y-1">
-									<p class="font-medium leading-snug">{row.title}</p>
+								<div class="relative group max-w-[720px]">
+									<p class="font-medium leading-snug truncate" title={row.title}>
+										{row.title}
+									</p>
+									<div
+										class="pointer-events-none absolute left-0 top-full z-10 mt-1 hidden max-w-xs whitespace-normal rounded-md border bg-card px-3 py-2 text-xs text-foreground shadow-md group-hover:block"
+									>
+										{row.title}
+									</div>
 								</div>
 							</TableCell>
 							<TableCell class="text-center">
 								{#if showThumbnails}
 									<div class="relative inline-flex items-center justify-center group">
 										<img
-											src={row.thumbnail}
+											src={getThumbnail(row.site, row.thumbnail)}
 											alt={`${siteLabels[row.site]} thumbnail`}
 											class="mx-auto h-16 w-24 rounded-md border object-cover transition duration-200 group-hover:scale-110"
 											loading="lazy"
@@ -478,7 +601,7 @@
 											class="pointer-events-none absolute left-1/2 bottom-full mb-2 hidden w-44 -translate-x-1/2 flex-col items-center gap-1 rounded-xl border bg-card/90 p-2 text-[11px] text-muted-foreground shadow-lg backdrop-blur group-hover:flex"
 										>
 											<img
-												src={row.thumbnail}
+												src={getThumbnail(row.site, row.thumbnail)}
 												alt="preview"
 												class="h-32 w-48 rounded-md border object-cover"
 											/>
@@ -494,7 +617,10 @@
 								<Button
 									size="sm"
 									variant={row.liked ? 'secondary' : 'ghost'}
-									on:click={() => toggleLike(row.id)}
+									onclick={(event) => {
+										event.stopPropagation();
+										void toggleLike(row.id);
+									}}
 									aria-pressed={row.liked}
 									class={row.liked ? 'text-destructive' : 'text-muted-foreground'}
 								>
@@ -518,7 +644,10 @@
 								<Button
 									size="sm"
 									variant={row.read ? 'secondary' : 'outline'}
-									on:click={() => toggleRead(row.id)}
+									onclick={(event) => {
+										event.stopPropagation();
+										void toggleRead(row.id);
+									}}
 								>
 									{row.read ? '읽음' : '읽지 않음'}
 								</Button>
@@ -531,7 +660,7 @@
 							<TableCell class="text-xs text-muted-foreground">
 								{formatDateTime(state.lastRun)}
 							</TableCell>
-						</TableRow>
+						</tr>
 					{/each}
 				</TableBody>
 			</Table>

@@ -39,6 +39,7 @@ export const weekly_check_posts = sqliteTable(
 		site: text('site').notNull(),
 		sourceId: text('sourceId').notNull(),
 		title: text('title').notNull(),
+		url: text('url'),
 		thumbnail: text('thumbnail'),
 		postedAt: text('postedAt'),
 		likes: integer('likes').notNull().default(0),
@@ -49,7 +50,10 @@ export const weekly_check_posts = sqliteTable(
 			.default(sql`(strftime('%s', 'now'))`)
 	},
 	(table) => ({
-		siteSourceUnique: uniqueIndex('weekly-check-posts__site_source_idx').on(table.site, table.sourceId)
+		siteSourceUnique: uniqueIndex('weekly-check-posts__site_source_idx').on(
+			table.site,
+			table.sourceId
+		)
 	})
 );
 
