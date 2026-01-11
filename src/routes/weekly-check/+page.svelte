@@ -96,8 +96,10 @@
 	};
 
 	const siteOrder: SiteKey[] = ['kissav', 'missav', 'twidouga', 'torrentbot', 'kone'];
-	const manualSupportedSites: SiteKey[] = ['kone', 'twidouga', 'torrentbot'];
-	const autoSites: SiteKey[] = siteOrder.filter((s) => !manualSupportedSites.includes(s));
+	const autoSites: SiteKey[] = ['kissav', 'missav'];
+	const manualSupportedSites: SiteKey[] = siteOrder.filter((site) =>
+		['missav', 'twidouga', 'torrentbot', 'kone'].includes(site)
+	);
 
 	const defaultScraperTargets: Record<SiteKey, string> = {
 		kissav: 'https://kissjav.com/most-popular/?sort_by=video_viewed_week',
@@ -633,7 +635,9 @@
 						<div class="mb-2 flex items-center justify-between gap-2">
 							<div class="flex items-center gap-2">
 								<h3 class="text-sm font-semibold">수동 수집 (정적 HTML 붙여넣기)</h3>
-								<Badge variant="outline" class="text-[11px]">kone / twidouga / torrentbot</Badge>
+								<Badge variant="outline" class="text-[11px]">
+									missav / twidouga / torrentbot / kone
+								</Badge>
 							</div>
 							<p class="text-xs text-muted-foreground">타겟 페이지 열기 → 소스 복사 → 업로드</p>
 						</div>
@@ -877,7 +881,7 @@
 				<div>
 					<h3 class="text-lg font-semibold">정적 HTML 업로드</h3>
 					<p class="text-sm text-muted-foreground">
-						twidouga / torrentbot 정적 HTML을 붙여 넣어 수동 수집합니다.
+						missav / twidouga / torrentbot / kone 정적 HTML을 붙여 넣어 수동 수집합니다.
 					</p>
 				</div>
 				<Button variant="ghost" size="sm" onclick={closeManualDialog} disabled={manualLoading}>
@@ -901,6 +905,7 @@
 						{/each}
 					</select>
 					<div class="text-[11px] text-muted-foreground space-y-1">
+						<p>- missav: static/missav_example.html</p>
 						<p>- kone: static/kone_example.html</p>
 						<p>- twidouga: static/twidouga_example.html</p>
 						<p>- torrentbot: static/torrentbot_example.html</p>
