@@ -41,6 +41,7 @@
 
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import TimeElapsed from '$lib/components/TimeElapsed.svelte';
 	import { Button } from '$lib/components/ui/button';
 	import { Badge, type BadgeVariant } from '$lib/components/ui/badge';
 	import {
@@ -603,9 +604,7 @@
 											</Button>
 										</div>
 									</div>
-									<p class="text-xs text-muted-foreground">
-										최신 수집: {formatDateTime(state.lastRun)}
-									</p>
+									<TimeElapsed date={state.lastRun} />
 									<div class="grid gap-1">
 										<label
 											class="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground"
@@ -641,59 +640,63 @@
 							</div>
 							<p class="text-xs text-muted-foreground">타겟 페이지 열기 → 소스 복사 → 업로드</p>
 						</div>
-						<div class="grid gap-3 sm:grid-cols-1 lg:grid-cols-3">
+						<div class="grid gap-3 sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-4">
 							{#each manualSupportedSites as site}
 								{@const state = scraperStates[site]}
-								<div
-									class="flex flex-col gap-2 rounded-md border bg-background px-3 py-3 text-sm shadow-sm"
-								>
-									<div class="flex items-start justify-between gap-3">
-										<div class="space-y-1">
-											<div class="flex items-center gap-2 text-base font-medium capitalize">
-												<span>{siteLabels[site]}</span>
+								{@const isMissav = site === 'missav'}
+								{@const autoState = isMissav ? scraperStates['missav'] : undefined}
+								<!-- MissAV는 자동 수집이 실패했을 때만 표시 (또는 명시적 설정) -->
+								{#if !isMissav || (isMissav && autoState?.status === 'error')}
+									<div
+										class="flex flex-col gap-2 rounded-md border bg-background px-3 py-3 text-sm shadow-sm"
+									>
+										<div class="flex items-start justify-between gap-3">
+											<div class="space-y-1">
+												<div class="flex items-center gap-2 text-base font-medium capitalize">
+													<span>{siteLabels[site]}</span>
+												</div>
+												<p class="text-xs text-muted-foreground">
+													{state.message ?? '대기 중'}
+												</p>
 											</div>
-											<p class="text-xs text-muted-foreground">
-												{state.message ?? '대기 중'}
-											</p>
+											<div class="flex flex-col items-end gap-1">
+												<Badge variant={statusBadgeVariants[state.status]}>
+													{statusLabels[state.status]}
+												</Badge>
+												<Button
+													size="sm"
+													variant="default"
+													disabled={manualLoading}
+													onclick={() => openManualDialog(site)}
+												>
+													정적 HTML 업로드
+												</Button>
+											</div>
 										</div>
-										<div class="flex flex-col items-end gap-1">
-											<Badge variant={statusBadgeVariants[state.status]}>
-												{statusLabels[state.status]}
-											</Badge>
-											<Button
-												size="sm"
-												variant="default"
-												disabled={manualLoading}
-												onclick={() => openManualDialog(site)}
+										<TimeElapsed date={state.lastRun} />
+
+										<div class="grid gap-1 mt-1">
+											<label
+												class="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground"
+												for={`scraper-target-${site}`}
 											>
-												정적 HTML 업로드
-											</Button>
+												타겟 URL
+											</label>
+											<div class="flex gap-2">
+												<input
+													id={`scraper-target-${site}`}
+													type="text"
+													class="w-full rounded-md border bg-background px-2 py-1 text-sm focus-visible:border-primary focus-visible:outline-none"
+													value={scraperTargets[site]}
+													oninput={(event) => setScraperTarget(site, event.currentTarget.value)}
+												/>
+												<Button size="sm" variant="outline" onclick={() => openTargetPage(site)}>
+													페이지 열기
+												</Button>
+											</div>
 										</div>
 									</div>
-									<p class="text-xs text-muted-foreground">
-										최신 수집: {formatDateTime(state.lastRun)}
-									</p>
-									<div class="grid gap-1">
-										<label
-											class="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground"
-											for={`scraper-target-${site}`}
-										>
-											타겟 URL
-										</label>
-										<div class="flex gap-2">
-											<input
-												id={`scraper-target-${site}`}
-												type="text"
-												class="w-full rounded-md border bg-background px-2 py-1 text-sm focus-visible:border-primary focus-visible:outline-none"
-												value={scraperTargets[site]}
-												oninput={(event) => setScraperTarget(site, event.currentTarget.value)}
-											/>
-											<Button size="sm" variant="outline" onclick={() => openTargetPage(site)}>
-												페이지 열기
-											</Button>
-										</div>
-									</div>
-								</div>
+								{/if}
 							{/each}
 						</div>
 					</div>
