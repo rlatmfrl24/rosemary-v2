@@ -3,6 +3,7 @@ import { scrapeKissav } from '$lib/server/scraper/kissav';
 import { WeeklyCheckService } from '$lib/server/services/weekly-check';
 
 const DEFAULT_TARGET = 'https://kissjav.com/most-popular/?sort_by=video_viewed_week';
+const MAX_PAGES = 5;
 
 export const POST: RequestHandler = async ({ request, locals }) => {
 	const db = locals.db;
@@ -17,12 +18,15 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		const body = (await request.json().catch(() => null)) as unknown;
 		if (typeof body === 'object' && body !== null) {
 			const rawTarget = (body as { targetUrl?: unknown }).targetUrl;
-			if (typeof rawTarget === 'string' && rawTarget.trim()) {
-				targetUrl = rawTarget.trim();
+			if (typeof rawTarget === 'string') {
+				const trimmed = rawTarget.trim();
+				if (trimmed.startsWith('http')) {
+					targetUrl = trimmed;
+				}
 			}
 			const rawMaxPages = (body as { maxPages?: unknown }).maxPages;
 			if (typeof rawMaxPages === 'number' && rawMaxPages > 0) {
-				maxPages = rawMaxPages;
+				maxPages = Math.min(Math.floor(rawMaxPages), MAX_PAGES);
 			}
 		}
 	} catch {

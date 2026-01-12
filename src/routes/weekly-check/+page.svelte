@@ -96,10 +96,12 @@
 		kone: 'kone'
 	};
 
-const siteOrder: SiteKey[] = ['kissav', 'missav', 'twidouga', 'torrentbot', 'kone'];
-const manualOnlySites: SiteKey[] = ['kone', 'twidouga', 'torrentbot'];
-const manualUploadSites: SiteKey[] = [...manualOnlySites, 'missav'];
-const autoSites: PagedSite[] = siteOrder.filter((s) => !manualOnlySites.includes(s)) as PagedSite[];
+	const siteOrder: SiteKey[] = ['kissav', 'missav', 'twidouga', 'torrentbot', 'kone'];
+	const manualOnlySites: SiteKey[] = ['kone', 'twidouga', 'torrentbot'];
+	const manualUploadSites: SiteKey[] = [...manualOnlySites, 'missav'];
+	const autoSites: PagedSite[] = siteOrder.filter(
+		(s) => !manualOnlySites.includes(s)
+	) as PagedSite[];
 
 	const defaultScraperTargets: Record<SiteKey, string> = {
 		kissav: 'https://kissjav.com/most-popular/?sort_by=video_viewed_week',
@@ -127,7 +129,7 @@ const autoSites: PagedSite[] = siteOrder.filter((s) => !manualOnlySites.includes
 	const defaultMaxPages: Record<PagedSite, number> = { kissav: 1, missav: 1 };
 	let scraperMaxPages = $state<Record<PagedSite, number>>({ ...defaultMaxPages });
 	let siteFilter = $state<SiteFilter>('all');
-	let readFilter = $state<ReadFilter>('all');
+	let readFilter = $state<ReadFilter>('unread');
 	let showScraperPanel = $state(true);
 	let showThumbnails = $state(true);
 	let manualDialogOpen = $state(false);
@@ -543,6 +545,9 @@ const autoSites: PagedSite[] = siteOrder.filter((s) => !manualOnlySites.includes
 					<p class="text-sm text-muted-foreground">
 						타겟 URL, 최신 수집 일자, 수집 버튼을 간소하게 표시
 					</p>
+					<p class="text-xs text-muted-foreground">
+						요청은 페이지당 1.2초 지연·최대 5페이지, 429/5xx 시 자동 재시도합니다.
+					</p>
 				</div>
 				<div class="flex items-center gap-2">
 					<Button variant="outline" size="sm" onclick={toggleScraperVisibility}>
@@ -819,122 +824,208 @@ const autoSites: PagedSite[] = siteOrder.filter((s) => !manualOnlySites.includes
 				</p>
 			</div>
 
-			<Table>
-				<TableHeader>
-					<TableRow>
-						<TableHead class="w-12">#</TableHead>
-						<TableHead class="w-28">사이트</TableHead>
-						<TableHead>게시물 제목</TableHead>
-						<TableHead class="w-36 text-center">썸네일</TableHead>
-						<TableHead class="w-28">게시일</TableHead>
-						<TableHead class="w-28 text-center">좋아요</TableHead>
-						<TableHead class="w-24 text-center">읽음</TableHead>
-						<TableHead class="w-24 text-center">상태</TableHead>
-						<TableHead class="w-32">수집 일자</TableHead>
-					</TableRow>
-				</TableHeader>
-				<TableBody>
-					{#each filteredRows as row, index}
-						{@const state = scraperStates[row.site]}
-						<tr
-							data-state={row.read ? 'selected' : undefined}
-							class={`hover:bg-muted/50 data-[state=selected]:bg-muted border-b transition-colors ${row.url ? 'cursor-pointer' : ''}`}
-							onclick={() => navigateToUrl(row.site, row.url)}
-						>
-							<TableCell class="text-muted-foreground">{index + 1}</TableCell>
-							<TableCell>
-								<div class="flex flex-col gap-1">
-									<Badge variant="outline" class="w-fit capitalize">{siteLabels[row.site]}</Badge>
-								</div>
-							</TableCell>
-							<TableCell>
-								<div class="relative group max-w-[720px]">
-									<p class="font-medium leading-snug truncate" title={row.title}>
-										{row.title}
-									</p>
-									<div
-										class="pointer-events-none absolute left-0 top-full z-10 mt-1 hidden max-w-xs whitespace-normal rounded-md border bg-card px-3 py-2 text-xs text-foreground shadow-md group-hover:block"
-									>
-										{row.title}
+			<div class="hidden md:block">
+				<Table>
+					<TableHeader>
+						<TableRow>
+							<TableHead class="w-12">#</TableHead>
+							<TableHead class="w-28">사이트</TableHead>
+							<TableHead>게시물 제목</TableHead>
+							<TableHead class="w-36 text-center">썸네일</TableHead>
+							<TableHead class="w-28">게시일</TableHead>
+							<TableHead class="w-28 text-center">좋아요</TableHead>
+							<TableHead class="w-24 text-center">읽음</TableHead>
+							<TableHead class="w-24 text-center">상태</TableHead>
+							<TableHead class="w-32">수집 일자</TableHead>
+						</TableRow>
+					</TableHeader>
+					<TableBody>
+						{#each filteredRows as row, index}
+							{@const state = scraperStates[row.site]}
+							<tr
+								data-state={row.read ? 'selected' : undefined}
+								class={`hover:bg-muted/50 data-[state=selected]:bg-muted border-b transition-colors ${row.url ? 'cursor-pointer' : ''}`}
+								onclick={() => navigateToUrl(row.site, row.url)}
+							>
+								<TableCell class="text-muted-foreground">{index + 1}</TableCell>
+								<TableCell>
+									<div class="flex flex-col gap-1">
+										<Badge variant="outline" class="w-fit capitalize">{siteLabels[row.site]}</Badge>
 									</div>
-								</div>
-							</TableCell>
-							<TableCell class="text-center">
-								{#if showThumbnails}
-									<div class="relative inline-flex items-center justify-center group">
-										<img
-											src={getThumbnail(row.site, row.thumbnail)}
-											alt={`${siteLabels[row.site]} thumbnail`}
-											class="mx-auto h-16 w-24 rounded-md border object-cover transition duration-200 group-hover:scale-110"
-											loading="lazy"
-										/>
+								</TableCell>
+								<TableCell>
+									<div class="relative group max-w-[720px]">
+										<p class="font-medium leading-snug truncate" title={row.title}>
+											{row.title}
+										</p>
 										<div
-											class="pointer-events-none absolute left-1/2 bottom-full mb-2 hidden w-44 -translate-x-1/2 flex-col items-center gap-1 rounded-xl border bg-card/90 p-2 text-[11px] text-muted-foreground shadow-lg backdrop-blur group-hover:flex"
+											class="pointer-events-none absolute left-0 top-full z-10 mt-1 hidden max-w-xs whitespace-normal rounded-md border bg-card px-3 py-2 text-xs text-foreground shadow-md group-hover:block"
 										>
-											<img
-												src={getThumbnail(row.site, row.thumbnail)}
-												alt="preview"
-												class="h-32 w-48 rounded-md border object-cover"
-											/>
-											<span>썸네일 미리보기</span>
+											{row.title}
 										</div>
 									</div>
-								{:else}
-									<span class="text-xs text-muted-foreground">숨김</span>
-								{/if}
-							</TableCell>
-							<TableCell>{formatPostedAt(row.postedAt)}</TableCell>
-							<TableCell class="text-center">
-								<Button
-									size="sm"
-									variant={row.liked ? 'secondary' : 'ghost'}
-									onclick={(event) => {
-										event.stopPropagation();
-										void toggleLike(row.id);
-									}}
-									aria-pressed={row.liked}
-									class={row.liked ? 'text-destructive' : 'text-muted-foreground'}
-								>
-									<svg
-										xmlns="http://www.w3.org/2000/svg"
-										viewBox="0 0 24 24"
-										fill="currentColor"
-										class="h-4 w-4"
-										aria-hidden="true"
+								</TableCell>
+								<TableCell class="text-center">
+									{#if showThumbnails}
+										<div class="relative inline-flex items-center justify-center group">
+											<img
+												src={getThumbnail(row.site, row.thumbnail)}
+												alt={`${siteLabels[row.site]} thumbnail`}
+												class="mx-auto h-16 w-24 rounded-md border object-cover transition duration-200 group-hover:scale-110"
+												loading="lazy"
+											/>
+											<div
+												class="pointer-events-none absolute left-1/2 bottom-full mb-2 hidden w-44 -translate-x-1/2 flex-col items-center gap-1 rounded-xl border bg-card/90 p-2 text-[11px] text-muted-foreground shadow-lg backdrop-blur group-hover:flex"
+											>
+												<img
+													src={getThumbnail(row.site, row.thumbnail)}
+													alt="preview"
+													class="h-32 w-48 rounded-md border object-cover"
+												/>
+												<span>썸네일 미리보기</span>
+											</div>
+										</div>
+									{:else}
+										<span class="text-xs text-muted-foreground">숨김</span>
+									{/if}
+								</TableCell>
+								<TableCell>{formatPostedAt(row.postedAt)}</TableCell>
+								<TableCell class="text-center">
+									<Button
+										size="sm"
+										variant={row.liked ? 'secondary' : 'ghost'}
+										onclick={(event) => {
+											event.stopPropagation();
+											void toggleLike(row.id);
+										}}
+										aria-pressed={row.liked}
+										class={row.liked ? 'text-destructive' : 'text-muted-foreground'}
 									>
-										<path
-											fill-rule="evenodd"
-											d="M12 21s-1-.45-2.1-1.2C7.4 18.8 4 16.1 4 11.7 4 8.3 6.3 6 9.2 6 10.7 6 12 6.9 12.8 7.9 13.6 6.9 14.9 6 16.4 6 19.3 6 21.6 8.3 21.6 11.7c0 4.4-3.4 7.1-5.9 8.1C13 20.55 12 21 12 21z"
-											clip-rule="evenodd"
-										/>
-									</svg>
-									<span class="sr-only">좋아요</span>
-								</Button>
-							</TableCell>
-							<TableCell class="text-center">
+										<svg
+											xmlns="http://www.w3.org/2000/svg"
+											viewBox="0 0 24 24"
+											fill="currentColor"
+											class="h-4 w-4"
+											aria-hidden="true"
+										>
+											<path
+												fill-rule="evenodd"
+												d="M12 21s-1-.45-2.1-1.2C7.4 18.8 4 16.1 4 11.7 4 8.3 6.3 6 9.2 6 10.7 6 12 6.9 12.8 7.9 13.6 6.9 14.9 6 16.4 6 19.3 6 21.6 8.3 21.6 11.7c0 4.4-3.4 7.1-5.9 8.1C13 20.55 12 21 12 21z"
+												clip-rule="evenodd"
+											/>
+										</svg>
+										<span class="sr-only">좋아요</span>
+									</Button>
+								</TableCell>
+								<TableCell class="text-center">
+									<Button
+										size="sm"
+										variant={row.read ? 'secondary' : 'outline'}
+										onclick={(event) => {
+											event.stopPropagation();
+											void toggleRead(row.id);
+										}}
+									>
+										{row.read ? '읽음' : '읽지 않음'}
+									</Button>
+								</TableCell>
+								<TableCell class="text-center">
+									<Badge variant={statusBadgeVariants[state.status]}>
+										{statusLabels[state.status]}
+									</Badge>
+								</TableCell>
+								<TableCell class="text-xs text-muted-foreground">
+									{formatDateTime(state.lastRun)}
+								</TableCell>
+							</tr>
+						{/each}
+					</TableBody>
+				</Table>
+			</div>
+			<div class="md:hidden mt-4 grid gap-4 sm:grid-cols-2">
+				{#if filteredRows.length === 0}
+					<p class="text-sm text-muted-foreground">조건을 만족하는 게시물이 없습니다.</p>
+				{/if}
+				{#each filteredRows as row, index}
+					{@const state = scraperStates[row.site]}
+					<article
+						class="flex flex-col gap-3 rounded-xl border border-border bg-background/80 px-4 py-4 shadow-sm transition hover:border-primary/60 hover:shadow-lg"
+					>
+						<div class="flex items-start justify-between gap-3">
+							<div class="flex flex-col gap-1">
+								<Badge variant="outline" class="capitalize">{siteLabels[row.site]}</Badge>
+								<p class="text-xs text-muted-foreground">
+									#{index + 1} · {row.sourceId ?? '소스 없음'}
+								</p>
+							</div>
+							<Badge variant={statusBadgeVariants[state.status]}>
+								{statusLabels[state.status]}
+							</Badge>
+						</div>
+						<p class="font-semibold leading-snug text-sm line-clamp-3" title={row.title}>
+							{row.title}
+						</p>
+						{#if showThumbnails}
+							<img
+								src={getThumbnail(row.site, row.thumbnail)}
+								alt={`${siteLabels[row.site]} thumbnail`}
+								class="h-36 w-full rounded-md border object-cover transition duration-200 hover:scale-[1.01]"
+								loading="lazy"
+							/>
+						{/if}
+						<div
+							class="flex flex-wrap items-center justify-between gap-2 text-[11px] font-medium text-muted-foreground"
+						>
+							<span
+								>게시일: <span class="font-normal text-foreground"
+									>{formatPostedAt(row.postedAt)}</span
+								></span
+							>
+							<span
+								>수집됨: <span class="font-normal text-foreground"
+									>{formatDateTime(state.lastRun)}</span
+								></span
+							>
+						</div>
+						<div class="flex flex-wrap gap-2">
+							<Button
+								size="sm"
+								variant={row.liked ? 'secondary' : 'ghost'}
+								onclick={(event) => {
+									event.stopPropagation();
+									void toggleLike(row.id);
+								}}
+								aria-pressed={row.liked}
+								class={row.liked ? 'text-destructive' : 'text-muted-foreground'}
+							>
+								{row.liked ? '좋아요 취소' : '좋아요'}
+							</Button>
+							<Button
+								size="sm"
+								variant={row.read ? 'secondary' : 'outline'}
+								onclick={(event) => {
+									event.stopPropagation();
+									void toggleRead(row.id);
+								}}
+							>
+								{row.read ? '읽음' : '읽지 않음'}
+							</Button>
+							{#if row.url}
 								<Button
 									size="sm"
-									variant={row.read ? 'secondary' : 'outline'}
+									variant="outline"
 									onclick={(event) => {
 										event.stopPropagation();
-										void toggleRead(row.id);
+										navigateToUrl(row.site, row.url);
 									}}
 								>
-									{row.read ? '읽음' : '읽지 않음'}
+									페이지 보기
 								</Button>
-							</TableCell>
-							<TableCell class="text-center">
-								<Badge variant={statusBadgeVariants[state.status]}>
-									{statusLabels[state.status]}
-								</Badge>
-							</TableCell>
-							<TableCell class="text-xs text-muted-foreground">
-								{formatDateTime(state.lastRun)}
-							</TableCell>
-						</tr>
-					{/each}
-				</TableBody>
-			</Table>
+							{/if}
+						</div>
+					</article>
+				{/each}
+			</div>
 		</section>
 	</div>
 </div>
@@ -959,22 +1050,22 @@ const autoSites: PagedSite[] = siteOrder.filter((s) => !manualOnlySites.includes
 					<label for="manual-site" class="text-xs uppercase tracking-[0.2em] text-muted-foreground">
 						사이트
 					</label>
-						<select
-							id="manual-site"
-							class="w-full rounded-md border bg-background px-2 py-1 text-sm"
-							bind:value={manualSite}
-							disabled={manualLoading}
-						>
-							{#each manualUploadSites as site}
+					<select
+						id="manual-site"
+						class="w-full rounded-md border bg-background px-2 py-1 text-sm"
+						bind:value={manualSite}
+						disabled={manualLoading}
+					>
+						{#each manualUploadSites as site}
 							<option value={site}>{siteLabels[site]}</option>
 						{/each}
 					</select>
-						<div class="text-[11px] text-muted-foreground space-y-1">
-							<p>- missav: @static/missav_example.html</p>
-							<p>- kone: @static/kone.html</p>
-							<p>- twidouga: @static/twdouga_example.html</p>
-							<p>- torrentbot: @static/torrentbot_example.html</p>
-						</div>
+					<div class="text-[11px] text-muted-foreground space-y-1">
+						<p>- missav: @static/missav_example.html</p>
+						<p>- kone: @static/kone.html</p>
+						<p>- twidouga: @static/twdouga_example.html</p>
+						<p>- torrentbot: @static/torrentbot_example.html</p>
+					</div>
 				</div>
 				<div class="space-y-2">
 					<label for="manual-html" class="text-xs uppercase tracking-[0.2em] text-muted-foreground">

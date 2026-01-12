@@ -232,12 +232,20 @@ export class WeeklyCheckService {
 		site: string,
 		targetUrl: string,
 		scraperFn: (url: string) => Promise<Post[]>,
-		maxPages: number = 1
+		maxPages: number = 1,
+		options?: {
+			pageDelayMs?: number;
+			maxErrors?: number;
+			stopOnError?: boolean;
+		}
 	) {
 		await this.upsertState(site, targetUrl, { status: 'running', message: '수집 시작...' });
 
 		let totalNew = 0;
 		let errors = 0;
+		const pageDelayMs = options?.pageDelayMs ?? 1200;
+		const maxErrors = options?.maxErrors ?? 2;
+		const stopOnError = options?.stopOnError ?? true;
 		const pageInfo = this.getPageInfo(site, targetUrl);
 
 		try {
@@ -259,14 +267,17 @@ export class WeeklyCheckService {
 				} catch (e) {
 					console.error(`Scrape failed for ${site} page ${page}`, e);
 					errors++;
-					// If first page fails, basic failure. If subsequent, maybe continue?
-					// For now, if page 1 fails, we stop. Others we might continue.
-					if (page === 1) throw e;
+					if (page === 1 && stopOnError) {
+						throw e;
+					}
+					if (errors > maxErrors) {
+						throw new Error(`Too many errors (${errors})`);
+					}
 				}
 
 				// Friendly delay between pages to avoid rate limits
 				if (page < maxPages) {
-					await new Promise((r) => setTimeout(r, 1000));
+					await new Promise((r) => setTimeout(r, pageDelayMs));
 				}
 			}
 
