@@ -57,6 +57,7 @@
 	type RawScraperState = LoadData['scraperStates'][number];
 
 	type SiteKey = 'kissav' | 'missav' | 'twidouga' | 'torrentbot' | 'kone';
+	type PagedSite = 'kissav' | 'missav';
 	type SiteFilter = 'all' | SiteKey;
 	type ReadFilter = 'all' | 'read' | 'unread';
 
@@ -97,7 +98,9 @@
 
 	const siteOrder: SiteKey[] = ['kissav', 'missav', 'twidouga', 'torrentbot', 'kone'];
 	const manualSupportedSites: SiteKey[] = ['kone', 'twidouga', 'torrentbot'];
-	const autoSites: SiteKey[] = siteOrder.filter((s) => !manualSupportedSites.includes(s));
+	const autoSites: PagedSite[] = siteOrder.filter(
+		(s) => !manualSupportedSites.includes(s)
+	) as PagedSite[];
 
 	const defaultScraperTargets: Record<SiteKey, string> = {
 		kissav: 'https://kissjav.com/most-popular/?sort_by=video_viewed_week',
@@ -122,6 +125,8 @@
 		normalizeScraperStates(normalizeScraperRows(data.scraperStates))
 	);
 	let scraperTargets = $state<Record<SiteKey, string>>({ ...defaultScraperTargets });
+	const defaultMaxPages: Record<PagedSite, number> = { kissav: 1, missav: 1 };
+	let scraperMaxPages = $state<Record<PagedSite, number>>({ ...defaultMaxPages });
 	let siteFilter = $state<SiteFilter>('all');
 	let readFilter = $state<ReadFilter>('all');
 	let showScraperPanel = $state(true);
@@ -193,6 +198,10 @@
 
 	function isSiteKey(value: string): value is SiteKey {
 		return siteOrder.includes(value as SiteKey);
+	}
+
+	function isPagedSite(value: SiteKey): value is PagedSite {
+		return autoSites.includes(value as PagedSite);
 	}
 
 	function toDate(value?: number | null) {
@@ -269,6 +278,28 @@
 	function formatDateTime(date?: Date | null) {
 		if (!date) return '없음';
 		return dateTimeFormatter.format(date);
+	}
+
+	const STALE_THRESHOLD_HOURS = 12;
+
+	function getHoursSince(date?: Date | null): number | null {
+		if (!date) return null;
+		const diffMs = Date.now() - date.getTime();
+		return Math.floor(diffMs / (1000 * 60 * 60));
+	}
+
+	function formatElapsedTime(date?: Date | null) {
+		const hours = getHoursSince(date);
+		if (hours === null) return '수집 기록 없음';
+		if (hours < 1) return '방금 수집됨';
+		if (hours < 24) return `${hours}시간 전`;
+		const days = Math.floor(hours / 24);
+		return `${days}일 전`;
+	}
+
+	function isStale(date?: Date | null) {
+		const hours = getHoursSince(date);
+		return hours !== null && hours >= STALE_THRESHOLD_HOURS;
 	}
 
 	function formatPostedAt(value?: string | null) {
@@ -394,6 +425,11 @@
 		}
 	}
 
+	function setMaxPages(site: PagedSite, value: number) {
+		const normalized = Number.isFinite(value) && value > 0 ? Math.floor(value) : 1;
+		scraperMaxPages = { ...scraperMaxPages, [site]: normalized };
+	}
+
 	function toggleScraperVisibility() {
 		showScraperPanel = !showScraperPanel;
 	}
@@ -458,10 +494,17 @@
 		};
 
 		try {
+			const payload: { targetUrl: string; maxPages?: number } = {
+				targetUrl: scraperTargets[site]
+			};
+			if (isPagedSite(site)) {
+				payload.maxPages = scraperMaxPages[site] ?? 1;
+			}
+
 			const res = await fetch(endpoint, {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ targetUrl: scraperTargets[site] })
+				body: JSON.stringify(payload)
 			});
 			if (!res.ok) throw new Error(`scrape failed: ${res.status}`);
 			await refetchData();
@@ -522,6 +565,10 @@
 						<div class="grid gap-3 sm:grid-cols-1 lg:grid-cols-2">
 							{#each autoSites as site}
 								{@const state = scraperStates[site]}
+								{@const elapsedLabel = formatElapsedTime(state.lastRun)}
+								{@const showStaleReminder = isStale(state.lastRun)}
+								{@const scraperCanTrigger =
+									state.status !== 'running' && state.status !== 'unsupported'}
 								<div
 									class="flex flex-col gap-2 rounded-md border bg-background px-3 py-3 text-sm shadow-sm"
 								>
@@ -551,26 +598,71 @@
 									<p class="text-xs text-muted-foreground">
 										최신 수집: {formatDateTime(state.lastRun)}
 									</p>
-									<div class="grid gap-1">
-										<label
-											class="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground"
-											for={`scraper-target-${site}`}
-										>
-											타겟 URL
-										</label>
-										<div class="flex gap-2">
-											<input
-												id={`scraper-target-${site}`}
-												type="text"
-												class="w-full rounded-md border bg-background px-2 py-1 text-sm focus-visible:border-primary focus-visible:outline-none"
-												value={scraperTargets[site]}
-												oninput={(event) => setScraperTarget(site, event.currentTarget.value)}
-											/>
-											<Button size="sm" variant="outline" onclick={() => openTargetPage(site)}>
-												페이지 열기
-											</Button>
+									<p
+										class={`text-xs ${showStaleReminder ? 'text-warning-foreground font-semibold' : 'text-muted-foreground'}`}
+									>
+										수집 경과: {elapsedLabel}
+									</p>
+									<div class="grid gap-2">
+										<div class="flex flex-wrap gap-3">
+											<div class="flex-1 min-w-0 space-y-1">
+												<label
+													class="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground"
+													for={`scraper-target-${site}`}
+												>
+													타겟 URL
+												</label>
+												<div class="flex flex-wrap gap-2">
+													<input
+														id={`scraper-target-${site}`}
+														type="text"
+														class="flex-1 min-w-0 rounded-md border bg-background px-2 py-1 text-sm focus-visible:border-primary focus-visible:outline-none"
+														value={scraperTargets[site]}
+														oninput={(event) => setScraperTarget(site, event.currentTarget.value)}
+													/>
+													<Button size="sm" variant="outline" onclick={() => openTargetPage(site)}>
+														페이지 열기
+													</Button>
+												</div>
+											</div>
+											<div class="w-full max-w-[220px] space-y-1">
+												<label
+													class="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground"
+													for={`scraper-max-pages-${site}`}
+												>
+													최대 페이지 (1부터 순회)
+												</label>
+												<div class="flex flex-wrap gap-2">
+													<input
+														id={`scraper-max-pages-${site}`}
+														type="number"
+														min="1"
+														step="1"
+														inputmode="numeric"
+														class="w-full min-w-0 rounded-md border bg-background px-2 py-1 text-sm focus-visible:border-primary focus-visible:outline-none"
+														value={scraperMaxPages[site]}
+														oninput={(event) =>
+															setMaxPages(site, event.currentTarget.valueAsNumber)}
+													/>
+												</div>
+											</div>
 										</div>
 									</div>
+									{#if showStaleReminder}
+										<div
+											class="flex flex-wrap items-center gap-2 rounded-md border border-warning/60 bg-warning/10 px-3 py-2 text-[11px] text-warning-foreground"
+										>
+											<span>12시간 이상 지났습니다. 최신 정보를 위해 재수집해보세요.</span>
+											<Button
+												size="sm"
+												variant="outline"
+												disabled={!scraperCanTrigger}
+												onclick={() => triggerScrape(site)}
+											>
+												지금 재수집
+											</Button>
+										</div>
+									{/if}
 								</div>
 							{/each}
 						</div>
@@ -587,6 +679,8 @@
 						<div class="grid gap-3 sm:grid-cols-1 lg:grid-cols-3">
 							{#each manualSupportedSites as site}
 								{@const state = scraperStates[site]}
+								{@const elapsedLabel = formatElapsedTime(state.lastRun)}
+								{@const showStaleReminder = isStale(state.lastRun)}
 								<div
 									class="flex flex-col gap-2 rounded-md border bg-background px-3 py-3 text-sm shadow-sm"
 								>
@@ -616,6 +710,11 @@
 									<p class="text-xs text-muted-foreground">
 										최신 수집: {formatDateTime(state.lastRun)}
 									</p>
+									<p
+										class={`text-xs ${showStaleReminder ? 'text-warning-foreground font-semibold' : 'text-muted-foreground'}`}
+									>
+										수집 경과: {elapsedLabel}
+									</p>
 									<div class="grid gap-1">
 										<label
 											class="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground"
@@ -636,6 +735,21 @@
 											</Button>
 										</div>
 									</div>
+									{#if showStaleReminder}
+										<div
+											class="flex flex-wrap items-center gap-2 rounded-md border border-warning/60 bg-warning/10 px-3 py-2 text-[11px] text-warning-foreground"
+										>
+											<span>12시간 이상 지났습니다. 새 HTML을 업로드해 최신 상태로 만드세요.</span>
+											<Button
+												size="sm"
+												variant="outline"
+												disabled={manualLoading}
+												onclick={() => openManualDialog(site)}
+											>
+												소스 업로드
+											</Button>
+										</div>
+									{/if}
 								</div>
 							{/each}
 						</div>
