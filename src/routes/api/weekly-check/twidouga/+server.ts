@@ -2,6 +2,8 @@ import { error, json, type RequestHandler } from '@sveltejs/kit';
 import { parseTwidouga } from '$lib/server/scraper/twidouga';
 import { WeeklyCheckService } from '$lib/server/services/weekly-check';
 
+const MAX_HTML_CHARS = 800_000;
+
 export const POST: RequestHandler = async ({ request, locals }) => {
 	const db = locals.db;
 	if (!db) throw error(500, 'Database not available');
@@ -14,7 +16,9 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			? (body as { targetUrl: string }).targetUrl
 			: 'manual-html';
 
-	if (!html.trim()) throw error(400, 'html is required');
+	const trimmed = html.trim();
+	if (!trimmed) throw error(400, 'html is required');
+	if (trimmed.length > MAX_HTML_CHARS) throw error(413, 'html too large');
 
 	const service = new WeeklyCheckService(db);
 

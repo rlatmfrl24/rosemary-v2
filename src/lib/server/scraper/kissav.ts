@@ -1,8 +1,6 @@
 import * as cheerio from 'cheerio';
 import type { Post } from '$lib/server/services/weekly-check';
-
-const USER_AGENT =
-	'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36';
+import { fetchHtml } from './utils';
 
 const KISSAV_BASE = 'https://kissjav.com';
 
@@ -68,19 +66,7 @@ export function parseKissav(html: string): Post[] {
 }
 
 export async function fetchKissavHtml(targetUrl: string) {
-	const res = await fetch(targetUrl, {
-		headers: {
-			'User-Agent': USER_AGENT,
-			Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-			'Accept-Language': 'ko-KR,ko;q=0.9,en;q=0.8'
-		}
-	});
-
-	if (!res.ok) {
-		throw new Error(`HTTP ${res.status} ${res.statusText}`);
-	}
-
-	return await res.text();
+	return fetchHtml(targetUrl);
 }
 
 export async function scrapeKissav(targetUrl: string): Promise<Post[]> {

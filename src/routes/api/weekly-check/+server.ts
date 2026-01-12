@@ -30,8 +30,18 @@ export const PATCH: RequestHandler = async ({ request, locals }) => {
 		);
 	};
 
+	const isValidUrl = (value: string) => {
+		if (!value.trim()) return false;
+		if (!value.startsWith('http')) return false;
+		return value.length < 2048;
+	};
+
 	// Update scraper target URL
 	if (isTargetUpdate(body)) {
+		if (!isValidUrl(body.targetUrl)) {
+			throw error(400, 'Invalid targetUrl');
+		}
+
 		const [state] = await db
 			.insert(weekly_check_scraper_state)
 			.values({

@@ -1,10 +1,8 @@
 import * as cheerio from 'cheerio';
 import type { Post } from '$lib/server/services/weekly-check';
+import { fetchHtml } from './utils';
 
-const USER_AGENT =
-	'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36';
 const MISSAV_PROXY_PREFIX = 'https://r.jina.ai/';
-
 const MISSAV_BASE = 'https://missav123.to';
 
 const isCloudflareBlock = (html: string) => /html>\s*<head>/.test(html) && /cloudflare/i.test(html);
@@ -82,11 +80,6 @@ export function parseMissav(html: string): Post[] {
 	return results;
 }
 
-function buildProxyUrl(targetUrl: string) {
-	const url = new URL(targetUrl);
-	return `${MISSAV_PROXY_PREFIX}http://${url.host}${url.pathname}${url.search}`;
-}
-
 export function parseMissavProxy(markdown: string): Post[] {
 	const thumbnailByUrl = new Map<string, string>();
 	const imageRegex = /\[!\[[^\]]*]\((https?:\/\/[^\s)]+)\)\]\((https?:\/\/[^\s)]+\/v\/[^\s)]+)\)/g;
@@ -123,21 +116,13 @@ export function parseMissavProxy(markdown: string): Post[] {
 }
 
 export async function fetchMissavHtml(targetUrl: string, options?: { useProxy?: boolean }) {
-	const url = options?.useProxy ? buildProxyUrl(targetUrl) : targetUrl;
-	const res = await fetch(url, {
+	return fetchHtml(targetUrl, {
+		useProxy: options?.useProxy,
+		proxyPrefix: MISSAV_PROXY_PREFIX,
 		headers: {
-			'User-Agent': USER_AGENT,
-			Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-			'Accept-Language': 'ko-KR,ko;q=0.9,en;q=0.8',
 			Referer: targetUrl
 		}
 	});
-
-	if (!res.ok) {
-		throw new Error(`HTTP ${res.status} ${res.statusText}${options?.useProxy ? ' (proxy)' : ''}`);
-	}
-
-	return await res.text();
 }
 
 export async function scrapeMissav(targetUrl: string): Promise<Post[]> {
