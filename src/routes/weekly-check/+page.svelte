@@ -96,11 +96,10 @@
 		kone: 'kone'
 	};
 
-	const siteOrder: SiteKey[] = ['kissav', 'missav', 'twidouga', 'torrentbot', 'kone'];
-	const manualSupportedSites: SiteKey[] = ['kone', 'twidouga', 'torrentbot'];
-	const autoSites: PagedSite[] = siteOrder.filter(
-		(s) => !manualSupportedSites.includes(s)
-	) as PagedSite[];
+const siteOrder: SiteKey[] = ['kissav', 'missav', 'twidouga', 'torrentbot', 'kone'];
+const manualOnlySites: SiteKey[] = ['kone', 'twidouga', 'torrentbot'];
+const manualUploadSites: SiteKey[] = [...manualOnlySites, 'missav'];
+const autoSites: PagedSite[] = siteOrder.filter((s) => !manualOnlySites.includes(s)) as PagedSite[];
 
 	const defaultScraperTargets: Record<SiteKey, string> = {
 		kissav: 'https://kissjav.com/most-popular/?sort_by=video_viewed_week',
@@ -644,6 +643,23 @@
 											</Button>
 										</div>
 									</div>
+									{#if site === 'missav' && state.status === 'error'}
+										<div
+											class="flex flex-wrap items-center gap-2 rounded-md border border-warning/60 bg-warning/10 px-3 py-2 text-[11px] text-warning-foreground"
+										>
+											<span class="flex-1 text-[11px]">
+												MissAV 자동 수집 실패. 정적 HTML 업로드로 결과를 보완하세요.
+											</span>
+											<Button
+												size="sm"
+												variant="outline"
+												disabled={manualLoading}
+												onclick={() => openManualDialog('missav')}
+											>
+												정적 HTML 업로드
+											</Button>
+										</div>
+									{/if}
 									{#if showStaleReminder}
 										<div
 											class="flex flex-wrap items-center gap-2 rounded-md border border-warning/60 bg-warning/10 px-3 py-2 text-[11px] text-warning-foreground"
@@ -665,15 +681,20 @@
 					</div>
 
 					<div class="rounded-md border bg-muted/10 p-3">
-						<div class="mb-2 flex items-center justify-between gap-2">
+						<div class="mb-2 flex flex-col gap-1">
 							<div class="flex items-center gap-2">
 								<h3 class="text-sm font-semibold">수동 수집 (정적 HTML 붙여넣기)</h3>
-								<Badge variant="outline" class="text-[11px]">kone / twidouga / torrentbot</Badge>
+								<Badge variant="outline" class="text-[11px]">
+									missav / kone / twidouga / torrentbot
+								</Badge>
 							</div>
+							<p class="text-xs text-muted-foreground">
+								MissAV 자동 수집이 실패했을 경우 정적 HTML을 붙여넣어 데이터베이스를 보완하세요.
+							</p>
 							<p class="text-xs text-muted-foreground">타겟 페이지 열기 → 소스 복사 → 업로드</p>
 						</div>
 						<div class="grid gap-3 sm:grid-cols-1 lg:grid-cols-3">
-							{#each manualSupportedSites as site}
+							{#each manualUploadSites as site}
 								{@const state = scraperStates[site]}
 								{@const elapsedLabel = formatElapsedTime(state.lastRun)}
 								{@const showStaleReminder = isStale(state.lastRun)}
@@ -938,21 +959,22 @@
 					<label for="manual-site" class="text-xs uppercase tracking-[0.2em] text-muted-foreground">
 						사이트
 					</label>
-					<select
-						id="manual-site"
-						class="w-full rounded-md border bg-background px-2 py-1 text-sm"
-						bind:value={manualSite}
-						disabled={manualLoading}
-					>
-						{#each manualSupportedSites as site}
+						<select
+							id="manual-site"
+							class="w-full rounded-md border bg-background px-2 py-1 text-sm"
+							bind:value={manualSite}
+							disabled={manualLoading}
+						>
+							{#each manualUploadSites as site}
 							<option value={site}>{siteLabels[site]}</option>
 						{/each}
 					</select>
-					<div class="text-[11px] text-muted-foreground space-y-1">
-						<p>- kone: @static/kone.html</p>
-						<p>- twidouga: @static/twdouga_example.html</p>
-						<p>- torrentbot: @static/torrentbot_example.html</p>
-					</div>
+						<div class="text-[11px] text-muted-foreground space-y-1">
+							<p>- missav: @static/missav_example.html</p>
+							<p>- kone: @static/kone.html</p>
+							<p>- twidouga: @static/twdouga_example.html</p>
+							<p>- torrentbot: @static/torrentbot_example.html</p>
+						</div>
 				</div>
 				<div class="space-y-2">
 					<label for="manual-html" class="text-xs uppercase tracking-[0.2em] text-muted-foreground">
