@@ -1,6 +1,6 @@
 import { error, json, type RequestHandler } from '@sveltejs/kit';
-import { parseTwidouga, saveTwidougaPosts, saveTwidougaState } from '$lib/server/scraper/twidouga';
-import { nowEpochSeconds } from '$lib/server/scraper/utils';
+import { parseTwidouga } from '$lib/server/scraper/twidouga';
+import { WeeklyCheckService } from '$lib/server/services/weekly-check';
 
 export const POST: RequestHandler = async ({ request, locals }) => {
 	const db = locals.db;
@@ -16,35 +16,16 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 
 	if (!html.trim()) throw error(400, 'html is required');
 
-	const timestamp = nowEpochSeconds();
-
-	await saveTwidougaState(db, {
-		status: 'running',
-		message: '정적 HTML 파싱 중',
-		targetUrl,
-		lastRun: timestamp
-	});
+	const service = new WeeklyCheckService(db);
 
 	try {
-		const posts = parseTwidouga(html);
-		if (!posts.length) throw new Error('파싱 결과가 없습니다');
-
-		await saveTwidougaPosts(posts, db);
-		await saveTwidougaState(db, {
-			status: 'success',
-			message: `성공 (신규 ${posts.length}건)`,
-			targetUrl,
-			lastRun: timestamp
+		// Since we already have the HTML, we mock a scraper function that just returns the parsed result.
+		// We use 'twidouga' as site key.
+		const result = await service.runScraper('twidouga', targetUrl, async () => {
+			return parseTwidouga(html);
 		});
-
-		return json({ count: posts.length });
+		return json(result);
 	} catch (err) {
-		await saveTwidougaState(db, {
-			status: 'error',
-			message: err instanceof Error ? err.message : 'unknown error',
-			targetUrl,
-			lastRun: Math.floor(Date.now() / 1000)
-		});
 		throw error(400, err instanceof Error ? err.message : 'parse failed');
 	}
 };

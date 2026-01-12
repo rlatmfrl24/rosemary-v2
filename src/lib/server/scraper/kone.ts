@@ -1,20 +1,17 @@
 import * as cheerio from 'cheerio';
-import {
-	normalizeSpaces,
-	upsertScraperState,
-	upsertWeeklyPosts,
-	type WeeklyPostInput
-} from './utils';
-
-export type KonePost = WeeklyPostInput & { site: 'kone' };
+import type { Post } from '$lib/server/services/weekly-check';
 
 const KONE_BASE = 'https://kone.gg';
 
-export function parseKone(html: string): KonePost[] {
+function normalizeSpaces(value?: string | null) {
+	return value?.replace(/\s+/g, ' ').trim() ?? '';
+}
+
+export function parseKone(html: string): Post[] {
 	const $ = cheerio.load(html);
 	const anchors = $('.group\\/post-wrapper a[href*="/s/pornvideo/"]').toArray();
 
-	const results: KonePost[] = [];
+	const results: Post[] = [];
 	const seen = new Set<string>();
 	for (const el of anchors) {
 		const a = $(el);
@@ -72,20 +69,4 @@ export function parseKone(html: string): KonePost[] {
 	}
 
 	return results;
-}
-
-export async function saveKonePosts(posts: KonePost[], db: App.Locals['db']) {
-	await upsertWeeklyPosts(db, posts);
-}
-
-export async function saveKoneState(
-	db: App.Locals['db'],
-	state: Partial<{
-		targetUrl?: string;
-		status?: string;
-		message?: string | null;
-		lastRun?: number | null;
-	}>
-) {
-	await upsertScraperState(db, 'kone', state);
 }

@@ -57,6 +57,7 @@
 	type RawScraperState = LoadData['scraperStates'][number];
 
 	type SiteKey = 'kissav' | 'missav' | 'twidouga' | 'torrentbot' | 'kone';
+	type PagedSite = 'kissav' | 'missav';
 	type SiteFilter = 'all' | SiteKey;
 	type ReadFilter = 'all' | 'read' | 'unread';
 
@@ -96,10 +97,10 @@
 	};
 
 	const siteOrder: SiteKey[] = ['kissav', 'missav', 'twidouga', 'torrentbot', 'kone'];
-	const autoSites: SiteKey[] = ['kissav', 'missav'];
-	const manualSupportedSites: SiteKey[] = siteOrder.filter((site) =>
-		['missav', 'twidouga', 'torrentbot', 'kone'].includes(site)
-	);
+	const manualSupportedSites: SiteKey[] = ['kone', 'twidouga', 'torrentbot'];
+	const autoSites: PagedSite[] = siteOrder.filter(
+		(s) => !manualSupportedSites.includes(s)
+	) as PagedSite[];
 
 	const defaultScraperTargets: Record<SiteKey, string> = {
 		kissav: 'https://kissjav.com/most-popular/?sort_by=video_viewed_week',
@@ -108,8 +109,6 @@
 		torrentbot: 'https://torrentbot.com',
 		kone: 'https://kone.gg/s/pornvideo'
 	};
-
-	const LOCAL_STORAGE_KEY = 'weekly-check-manual-targets';
 
 	const defaultScraperStates: Record<SiteKey, ScraperState> = {
 		kissav: { status: 'idle', message: '대기 중' },
@@ -126,8 +125,10 @@
 		normalizeScraperStates(normalizeScraperRows(data.scraperStates))
 	);
 	let scraperTargets = $state<Record<SiteKey, string>>({ ...defaultScraperTargets });
+	const defaultMaxPages: Record<PagedSite, number> = { kissav: 1, missav: 1 };
+	let scraperMaxPages = $state<Record<PagedSite, number>>({ ...defaultMaxPages });
 	let siteFilter = $state<SiteFilter>('all');
-	let readFilter = $state<ReadFilter>('unread');
+	let readFilter = $state<ReadFilter>('all');
 	let showScraperPanel = $state(true);
 	let showThumbnails = $state(true);
 	let manualDialogOpen = $state(false);
@@ -135,8 +136,6 @@
 	let manualHtml = $state('');
 	let manualLoading = $state(false);
 	let manualMessage = $state<string | null>(null);
-	let refreshing = $state(false);
-	const MIN_MANUAL_HTML = 400;
 
 	const statusLabels: Record<ScraperState['status'], string> = {
 		idle: '대기',
@@ -189,8 +188,7 @@
 	});
 
 	$effect(() => {
-		const storedManualTargets = getManualTargetsFromStorage();
-		scraperTargets = { ...deriveTargets(scraperStates), ...storedManualTargets };
+		scraperTargets = deriveTargets(scraperStates);
 	});
 
 	onMount(() => {
@@ -200,6 +198,10 @@
 
 	function isSiteKey(value: string): value is SiteKey {
 		return siteOrder.includes(value as SiteKey);
+	}
+
+	function isPagedSite(value: SiteKey): value is PagedSite {
+		return autoSites.includes(value as PagedSite);
 	}
 
 	function toDate(value?: number | null) {
@@ -273,33 +275,31 @@
 		return result;
 	}
 
-	function getManualTargetsFromStorage(): Partial<Record<SiteKey, string>> {
-		if (typeof localStorage === 'undefined') return {};
-		try {
-			const raw = localStorage.getItem(LOCAL_STORAGE_KEY);
-			if (!raw) return {};
-			const parsed = JSON.parse(raw) as Partial<Record<SiteKey, string>>;
-			return parsed ?? {};
-		} catch {
-			return {};
-		}
-	}
-
-	function saveManualTargetToStorage(site: SiteKey, value: string) {
-		if (!manualSupportedSites.includes(site)) return;
-		if (typeof localStorage === 'undefined') return;
-		try {
-			const current = getManualTargetsFromStorage();
-			const next = { ...current, [site]: value };
-			localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(next));
-		} catch {
-			// noop
-		}
-	}
-
 	function formatDateTime(date?: Date | null) {
 		if (!date) return '없음';
 		return dateTimeFormatter.format(date);
+	}
+
+	const STALE_THRESHOLD_HOURS = 12;
+
+	function getHoursSince(date?: Date | null): number | null {
+		if (!date) return null;
+		const diffMs = Date.now() - date.getTime();
+		return Math.floor(diffMs / (1000 * 60 * 60));
+	}
+
+	function formatElapsedTime(date?: Date | null) {
+		const hours = getHoursSince(date);
+		if (hours === null) return '수집 기록 없음';
+		if (hours < 1) return '방금 수집됨';
+		if (hours < 24) return `${hours}시간 전`;
+		const days = Math.floor(hours / 24);
+		return `${days}일 전`;
+	}
+
+	function isStale(date?: Date | null) {
+		const hours = getHoursSince(date);
+		return hours !== null && hours >= STALE_THRESHOLD_HOURS;
 	}
 
 	function formatPostedAt(value?: string | null) {
@@ -346,7 +346,6 @@
 
 	async function resetData() {
 		try {
-			refreshing = true;
 			const res = await fetch('/api/weekly-check', { method: 'DELETE' });
 			if (!res.ok) throw new Error(`reset failed: ${res.status}`);
 
@@ -362,14 +361,11 @@
 			await refetchData();
 		} catch (error) {
 			console.error('weekly-check: reset failed', error);
-		} finally {
-			refreshing = false;
 		}
 	}
 
 	async function refetchData() {
 		try {
-			refreshing = true;
 			const res = await fetch('/api/weekly-check');
 			if (!res.ok) throw new Error(`fetch failed: ${res.status}`);
 			const payload = (await res.json()) as LoadData;
@@ -378,8 +374,6 @@
 			scraperTargets = deriveTargets(scraperStates);
 		} catch (error) {
 			console.error('weekly-check: refetch failed', error);
-		} finally {
-			refreshing = false;
 		}
 	}
 
@@ -418,7 +412,6 @@
 
 	async function setScraperTarget(site: SiteKey, value: string) {
 		scraperTargets = { ...scraperTargets, [site]: value };
-		saveManualTargetToStorage(site, value);
 		try {
 			const res = await fetch('/api/weekly-check', {
 				method: 'PATCH',
@@ -430,6 +423,11 @@
 		} catch (error) {
 			console.error('weekly-check: target update failed', error);
 		}
+	}
+
+	function setMaxPages(site: PagedSite, value: number) {
+		const normalized = Number.isFinite(value) && value > 0 ? Math.floor(value) : 1;
+		scraperMaxPages = { ...scraperMaxPages, [site]: normalized };
 	}
 
 	function toggleScraperVisibility() {
@@ -450,10 +448,6 @@
 
 	async function submitManualHtml() {
 		if (!manualHtml.trim()) return;
-		if (manualHtml.trim().length < MIN_MANUAL_HTML) {
-			manualMessage = `본문을 최소 ${MIN_MANUAL_HTML}자 이상 붙여넣어 주세요.`;
-			return;
-		}
 		manualLoading = true;
 		manualMessage = null;
 		try {
@@ -500,10 +494,17 @@
 		};
 
 		try {
+			const payload: { targetUrl: string; maxPages?: number } = {
+				targetUrl: scraperTargets[site]
+			};
+			if (isPagedSite(site)) {
+				payload.maxPages = scraperMaxPages[site] ?? 1;
+			}
+
 			const res = await fetch(endpoint, {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ targetUrl: scraperTargets[site] })
+				body: JSON.stringify(payload)
 			});
 			if (!res.ok) throw new Error(`scrape failed: ${res.status}`);
 			await refetchData();
@@ -522,30 +523,17 @@
 		<section class="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
 			<div class="space-y-1">
 				<h1 class="text-3xl font-semibold leading-tight">주간 인기 게시물 모니터링</h1>
-				<div class="flex items-center gap-2 text-xs text-muted-foreground">
-					<span>마지막 업데이트: {lastUpdated ? formatDateTime(lastUpdated) : 'N/A'}</span>
-					{#if refreshing}
-						<Badge variant="outline" class="h-5">동기화 중</Badge>
-					{/if}
-				</div>
+				<p class="text-xs text-muted-foreground">
+					마지막 업데이트: {lastUpdated ? formatDateTime(lastUpdated) : 'N/A'} (목업 기준)
+				</p>
 			</div>
 
 			<div class="flex gap-2">
 				<Button variant="outline" size="sm" onclick={toggleThumbnails}>
 					{showThumbnails ? '썸네일 숨기기' : '썸네일 보이기'}
 				</Button>
-				<Button
-					variant="ghost"
-					size="sm"
-					onclick={refetchData}
-					disabled={refreshing}
-					aria-busy={refreshing}
-				>
-					{refreshing ? '새로고침 중...' : '새로고침'}
-				</Button>
-				<Button variant="ghost" size="sm" onclick={resetData} disabled={refreshing}>
-					데이터 초기화
-				</Button>
+				<Button variant="ghost" size="sm" onclick={refetchData}>데이터 새로고침</Button>
+				<Button variant="ghost" size="sm" onclick={resetData}>데이터 초기화</Button>
 			</div>
 		</section>
 
@@ -577,6 +565,10 @@
 						<div class="grid gap-3 sm:grid-cols-1 lg:grid-cols-2">
 							{#each autoSites as site}
 								{@const state = scraperStates[site]}
+								{@const elapsedLabel = formatElapsedTime(state.lastRun)}
+								{@const showStaleReminder = isStale(state.lastRun)}
+								{@const scraperCanTrigger =
+									state.status !== 'running' && state.status !== 'unsupported'}
 								<div
 									class="flex flex-col gap-2 rounded-md border bg-background px-3 py-3 text-sm shadow-sm"
 								>
@@ -603,29 +595,70 @@
 											</Button>
 										</div>
 									</div>
-									<p class="text-xs text-muted-foreground">
-										최신 수집: {formatDateTime(state.lastRun)}
+									<p
+										class={`text-xs ${showStaleReminder ? 'text-warning-foreground font-semibold' : 'text-muted-foreground'}`}
+									>
+										수집 경과: {elapsedLabel}
 									</p>
-									<div class="grid gap-1">
-										<label
-											class="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground"
-											for={`scraper-target-${site}`}
-										>
-											타겟 URL
-										</label>
-										<div class="flex gap-2">
-											<input
-												id={`scraper-target-${site}`}
-												type="text"
-												class="w-full rounded-md border bg-background px-2 py-1 text-sm focus-visible:border-primary focus-visible:outline-none"
-												value={scraperTargets[site]}
-												oninput={(event) => setScraperTarget(site, event.currentTarget.value)}
-											/>
+									<div class="flex flex-wrap gap-3 items-end justify-between">
+										<div class="flex-1 min-w-0 space-y-1">
+											<label
+												class="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground"
+												for={`scraper-target-${site}`}
+											>
+												타겟 URL
+											</label>
+											<div class="flex gap-2">
+												<input
+													id={`scraper-target-${site}`}
+													type="text"
+													class="flex-1 min-w-0 rounded-md border bg-background px-2 py-1 text-sm focus-visible:border-primary focus-visible:outline-none"
+													value={scraperTargets[site]}
+													oninput={(event) => setScraperTarget(site, event.currentTarget.value)}
+												/>
+											</div>
+										</div>
+										<div class="w-full max-w-[220px] space-y-1">
+											<label
+												class="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground"
+												for={`scraper-max-pages-${site}`}
+											>
+												최대 페이지
+											</label>
+											<div class="flex gap-2">
+												<input
+													id={`scraper-max-pages-${site}`}
+													type="number"
+													min="1"
+													step="1"
+													inputmode="numeric"
+													class="w-full min-w-0 rounded-md border bg-background px-2 py-1 text-sm focus-visible:border-primary focus-visible:outline-none"
+													value={scraperMaxPages[site]}
+													oninput={(event) => setMaxPages(site, event.currentTarget.valueAsNumber)}
+												/>
+											</div>
+										</div>
+										<div class="flex flex-col items-end gap-1">
 											<Button size="sm" variant="outline" onclick={() => openTargetPage(site)}>
 												페이지 열기
 											</Button>
 										</div>
 									</div>
+									{#if showStaleReminder}
+										<div
+											class="flex flex-wrap items-center gap-2 rounded-md border border-warning/60 bg-warning/10 px-3 py-2 text-[11px] text-warning-foreground"
+										>
+											<span>12시간 이상 지났습니다. 최신 정보를 위해 재수집해보세요.</span>
+											<Button
+												size="sm"
+												variant="outline"
+												disabled={!scraperCanTrigger}
+												onclick={() => triggerScrape(site)}
+											>
+												지금 재수집
+											</Button>
+										</div>
+									{/if}
 								</div>
 							{/each}
 						</div>
@@ -635,15 +668,15 @@
 						<div class="mb-2 flex items-center justify-between gap-2">
 							<div class="flex items-center gap-2">
 								<h3 class="text-sm font-semibold">수동 수집 (정적 HTML 붙여넣기)</h3>
-								<Badge variant="outline" class="text-[11px]">
-									missav / twidouga / torrentbot / kone
-								</Badge>
+								<Badge variant="outline" class="text-[11px]">kone / twidouga / torrentbot</Badge>
 							</div>
 							<p class="text-xs text-muted-foreground">타겟 페이지 열기 → 소스 복사 → 업로드</p>
 						</div>
 						<div class="grid gap-3 sm:grid-cols-1 lg:grid-cols-3">
 							{#each manualSupportedSites as site}
 								{@const state = scraperStates[site]}
+								{@const elapsedLabel = formatElapsedTime(state.lastRun)}
+								{@const showStaleReminder = isStale(state.lastRun)}
 								<div
 									class="flex flex-col gap-2 rounded-md border bg-background px-3 py-3 text-sm shadow-sm"
 								>
@@ -670,29 +703,50 @@
 											</Button>
 										</div>
 									</div>
-									<p class="text-xs text-muted-foreground">
-										최신 수집: {formatDateTime(state.lastRun)}
+									<p
+										class={`text-xs ${showStaleReminder ? 'text-warning-foreground font-semibold' : 'text-muted-foreground'}`}
+									>
+										수집 경과: {elapsedLabel}
 									</p>
-									<div class="grid gap-1">
-										<label
-											class="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground"
-											for={`scraper-target-${site}`}
-										>
-											타겟 URL
-										</label>
-										<div class="flex gap-2">
-											<input
-												id={`scraper-target-${site}`}
-												type="text"
-												class="w-full rounded-md border bg-background px-2 py-1 text-sm focus-visible:border-primary focus-visible:outline-none"
-												value={scraperTargets[site]}
-												oninput={(event) => setScraperTarget(site, event.currentTarget.value)}
-											/>
+									<div class="flex flex-wrap gap-3 items-end justify-between">
+										<div class="flex-1 min-w-0 space-y-1">
+											<label
+												class="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground"
+												for={`scraper-target-${site}`}
+											>
+												타겟 URL
+											</label>
+											<div class="flex gap-2">
+												<input
+													id={`scraper-target-${site}`}
+													type="text"
+													class="flex-1 min-w-0 rounded-md border bg-background px-2 py-1 text-sm focus-visible:border-primary focus-visible:outline-none"
+													value={scraperTargets[site]}
+													oninput={(event) => setScraperTarget(site, event.currentTarget.value)}
+												/>
+											</div>
+										</div>
+										<div class="flex flex-col items-end gap-1">
 											<Button size="sm" variant="outline" onclick={() => openTargetPage(site)}>
 												페이지 열기
 											</Button>
 										</div>
 									</div>
+									{#if showStaleReminder}
+										<div
+											class="flex flex-wrap items-center gap-2 rounded-md border border-warning/60 bg-warning/10 px-3 py-2 text-[11px] text-warning-foreground"
+										>
+											<span>12시간 이상 지났습니다. 새 HTML을 업로드해 최신 상태로 만드세요.</span>
+											<Button
+												size="sm"
+												variant="outline"
+												disabled={manualLoading}
+												onclick={() => openManualDialog(site)}
+											>
+												소스 업로드
+											</Button>
+										</div>
+									{/if}
 								</div>
 							{/each}
 						</div>
@@ -710,7 +764,7 @@
 				<div class="space-y-1">
 					<h2 class="text-lg font-semibold">주간 인기 게시물</h2>
 					<p class="text-sm text-muted-foreground">
-						읽음 처리, 좋아요 토글, 썸네일 토글을 바로 시험할 수 있습니다.
+						각 행은 목업 데이터이며 읽음 처리, 좋아요 토글, 썸네일 토글을 테스트할 수 있습니다.
 					</p>
 				</div>
 				<div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
@@ -744,132 +798,122 @@
 				</p>
 			</div>
 
-			{#if !filteredRows.length}
-				<div class="rounded-md border bg-muted/30 p-6 text-center text-sm text-muted-foreground">
-					표시할 게시물이 없습니다. 새로고침 또는 수동 수집을 시도하세요.
-				</div>
-			{:else}
-				<div class="overflow-auto rounded-lg border">
-					<Table class="min-w-[960px] text-sm">
-						<TableHeader class="sticky top-0 z-10 bg-card">
-							<TableRow>
-								<TableHead class="w-12">#</TableHead>
-								<TableHead class="w-24">사이트</TableHead>
-								<TableHead>게시물 제목</TableHead>
-								<TableHead class="w-36 text-center">썸네일</TableHead>
-								<TableHead class="w-24">게시일</TableHead>
-								<TableHead class="w-24 text-center">좋아요</TableHead>
-								<TableHead class="w-24 text-center">읽음</TableHead>
-								<TableHead class="w-24 text-center">상태</TableHead>
-								<TableHead class="w-32">수집 일자</TableHead>
-							</TableRow>
-						</TableHeader>
-						<TableBody>
-							{#each filteredRows as row, index}
-								{@const state = scraperStates[row.site]}
-								<tr
-									data-state={row.read ? 'selected' : undefined}
-									class={`text-sm hover:bg-muted/50 data-[state=selected]:bg-muted border-b transition-colors ${row.url ? 'cursor-pointer' : ''}`}
-									onclick={() => navigateToUrl(row.site, row.url)}
+			<Table>
+				<TableHeader>
+					<TableRow>
+						<TableHead class="w-12">#</TableHead>
+						<TableHead class="w-28">사이트</TableHead>
+						<TableHead>게시물 제목</TableHead>
+						<TableHead class="w-36 text-center">썸네일</TableHead>
+						<TableHead class="w-28">게시일</TableHead>
+						<TableHead class="w-28 text-center">좋아요</TableHead>
+						<TableHead class="w-24 text-center">읽음</TableHead>
+						<TableHead class="w-24 text-center">상태</TableHead>
+						<TableHead class="w-32">수집 일자</TableHead>
+					</TableRow>
+				</TableHeader>
+				<TableBody>
+					{#each filteredRows as row, index}
+						{@const state = scraperStates[row.site]}
+						<tr
+							data-state={row.read ? 'selected' : undefined}
+							class={`hover:bg-muted/50 data-[state=selected]:bg-muted border-b transition-colors ${row.url ? 'cursor-pointer' : ''}`}
+							onclick={() => navigateToUrl(row.site, row.url)}
+						>
+							<TableCell class="text-muted-foreground">{index + 1}</TableCell>
+							<TableCell>
+								<div class="flex flex-col gap-1">
+									<Badge variant="outline" class="w-fit capitalize">{siteLabels[row.site]}</Badge>
+								</div>
+							</TableCell>
+							<TableCell>
+								<div class="relative group max-w-[720px]">
+									<p class="font-medium leading-snug truncate" title={row.title}>
+										{row.title}
+									</p>
+									<div
+										class="pointer-events-none absolute left-0 top-full z-10 mt-1 hidden max-w-xs whitespace-normal rounded-md border bg-card px-3 py-2 text-xs text-foreground shadow-md group-hover:block"
+									>
+										{row.title}
+									</div>
+								</div>
+							</TableCell>
+							<TableCell class="text-center">
+								{#if showThumbnails}
+									<div class="relative inline-flex items-center justify-center group">
+										<img
+											src={getThumbnail(row.site, row.thumbnail)}
+											alt={`${siteLabels[row.site]} thumbnail`}
+											class="mx-auto h-16 w-24 rounded-md border object-cover transition duration-200 group-hover:scale-110"
+											loading="lazy"
+										/>
+										<div
+											class="pointer-events-none absolute left-1/2 bottom-full mb-2 hidden w-44 -translate-x-1/2 flex-col items-center gap-1 rounded-xl border bg-card/90 p-2 text-[11px] text-muted-foreground shadow-lg backdrop-blur group-hover:flex"
+										>
+											<img
+												src={getThumbnail(row.site, row.thumbnail)}
+												alt="preview"
+												class="h-32 w-48 rounded-md border object-cover"
+											/>
+											<span>썸네일 미리보기</span>
+										</div>
+									</div>
+								{:else}
+									<span class="text-xs text-muted-foreground">숨김</span>
+								{/if}
+							</TableCell>
+							<TableCell>{formatPostedAt(row.postedAt)}</TableCell>
+							<TableCell class="text-center">
+								<Button
+									size="sm"
+									variant={row.liked ? 'secondary' : 'ghost'}
+									onclick={(event) => {
+										event.stopPropagation();
+										void toggleLike(row.id);
+									}}
+									aria-pressed={row.liked}
+									class={row.liked ? 'text-destructive' : 'text-muted-foreground'}
 								>
-									<TableCell class="text-muted-foreground">{index + 1}</TableCell>
-									<TableCell>
-										<div class="flex flex-col gap-1">
-											<Badge variant="outline" class="w-fit capitalize"
-												>{siteLabels[row.site]}</Badge
-											>
-										</div>
-									</TableCell>
-									<TableCell>
-										<div class="relative group max-w-[720px]">
-											<p class="font-medium leading-snug truncate" title={row.title}>
-												{row.title}
-											</p>
-											<div
-												class="pointer-events-none absolute left-0 top-full z-10 mt-1 hidden max-w-xs whitespace-normal rounded-md border bg-card px-3 py-2 text-xs text-foreground shadow-md group-hover:block"
-											>
-												{row.title}
-											</div>
-										</div>
-									</TableCell>
-									<TableCell class="text-center">
-										{#if showThumbnails}
-											<div class="relative inline-flex items-center justify-center group">
-												<img
-													src={getThumbnail(row.site, row.thumbnail)}
-													alt={`${siteLabels[row.site]} thumbnail`}
-													class="mx-auto h-16 w-24 rounded-md border object-cover transition duration-200 group-hover:scale-110"
-													loading="lazy"
-												/>
-												<div
-													class="pointer-events-none absolute left-1/2 bottom-full mb-2 hidden w-44 -translate-x-1/2 flex-col items-center gap-1 rounded-xl border bg-card/90 p-2 text-[11px] text-muted-foreground shadow-lg backdrop-blur group-hover:flex"
-												>
-													<img
-														src={getThumbnail(row.site, row.thumbnail)}
-														alt="preview"
-														class="h-32 w-48 rounded-md border object-cover"
-													/>
-													<span>썸네일 미리보기</span>
-												</div>
-											</div>
-										{:else}
-											<span class="text-xs text-muted-foreground">숨김</span>
-										{/if}
-									</TableCell>
-									<TableCell>{formatPostedAt(row.postedAt)}</TableCell>
-									<TableCell class="text-center">
-										<Button
-											size="sm"
-											variant={row.liked ? 'secondary' : 'ghost'}
-											onclick={(event) => {
-												event.stopPropagation();
-												void toggleLike(row.id);
-											}}
-											aria-pressed={row.liked}
-											class={row.liked ? 'text-destructive' : 'text-muted-foreground'}
-										>
-											<svg
-												xmlns="http://www.w3.org/2000/svg"
-												viewBox="0 0 24 24"
-												fill="currentColor"
-												class="h-4 w-4"
-												aria-hidden="true"
-											>
-												<path
-													fill-rule="evenodd"
-													d="M12 21s-1-.45-2.1-1.2C7.4 18.8 4 16.1 4 11.7 4 8.3 6.3 6 9.2 6 10.7 6 12 6.9 12.8 7.9 13.6 6.9 14.9 6 16.4 6 19.3 6 21.6 8.3 21.6 11.7c0 4.4-3.4 7.1-5.9 8.1C13 20.55 12 21 12 21z"
-													clip-rule="evenodd"
-												/>
-											</svg>
-											<span class="sr-only">좋아요</span>
-										</Button>
-									</TableCell>
-									<TableCell class="text-center">
-										<Button
-											size="sm"
-											variant={row.read ? 'secondary' : 'outline'}
-											onclick={(event) => {
-												event.stopPropagation();
-												void toggleRead(row.id);
-											}}
-										>
-											{row.read ? '읽음' : '읽지 않음'}
-										</Button>
-									</TableCell>
-									<TableCell class="text-center">
-										<Badge variant={statusBadgeVariants[state.status]}>
-											{statusLabels[state.status]}
-										</Badge>
-									</TableCell>
-									<TableCell class="text-xs text-muted-foreground">
-										{formatDateTime(state.lastRun)}
-									</TableCell>
-								</tr>
-							{/each}
-						</TableBody>
-					</Table>
-				</div>
-			{/if}
+									<svg
+										xmlns="http://www.w3.org/2000/svg"
+										viewBox="0 0 24 24"
+										fill="currentColor"
+										class="h-4 w-4"
+										aria-hidden="true"
+									>
+										<path
+											fill-rule="evenodd"
+											d="M12 21s-1-.45-2.1-1.2C7.4 18.8 4 16.1 4 11.7 4 8.3 6.3 6 9.2 6 10.7 6 12 6.9 12.8 7.9 13.6 6.9 14.9 6 16.4 6 19.3 6 21.6 8.3 21.6 11.7c0 4.4-3.4 7.1-5.9 8.1C13 20.55 12 21 12 21z"
+											clip-rule="evenodd"
+										/>
+									</svg>
+									<span class="sr-only">좋아요</span>
+								</Button>
+							</TableCell>
+							<TableCell class="text-center">
+								<Button
+									size="sm"
+									variant={row.read ? 'secondary' : 'outline'}
+									onclick={(event) => {
+										event.stopPropagation();
+										void toggleRead(row.id);
+									}}
+								>
+									{row.read ? '읽음' : '읽지 않음'}
+								</Button>
+							</TableCell>
+							<TableCell class="text-center">
+								<Badge variant={statusBadgeVariants[state.status]}>
+									{statusLabels[state.status]}
+								</Badge>
+							</TableCell>
+							<TableCell class="text-xs text-muted-foreground">
+								{formatDateTime(state.lastRun)}
+							</TableCell>
+						</tr>
+					{/each}
+				</TableBody>
+			</Table>
 		</section>
 	</div>
 </div>
@@ -881,7 +925,7 @@
 				<div>
 					<h3 class="text-lg font-semibold">정적 HTML 업로드</h3>
 					<p class="text-sm text-muted-foreground">
-						missav / twidouga / torrentbot / kone 정적 HTML을 붙여 넣어 수동 수집합니다.
+						twidouga / torrentbot 정적 HTML을 붙여 넣어 수동 수집합니다.
 					</p>
 				</div>
 				<Button variant="ghost" size="sm" onclick={closeManualDialog} disabled={manualLoading}>
@@ -905,11 +949,9 @@
 						{/each}
 					</select>
 					<div class="text-[11px] text-muted-foreground space-y-1">
-						<p>- missav: static/missav_example.html</p>
-						<p>- kone: static/kone_example.html</p>
-						<p>- twidouga: static/twidouga_example.html</p>
-						<p>- torrentbot: static/torrentbot_example.html</p>
-						<p>페이지 소스 전체 복사 후 붙여넣기</p>
+						<p>- kone: @static/kone.html</p>
+						<p>- twidouga: @static/twdouga_example.html</p>
+						<p>- torrentbot: @static/torrentbot_example.html</p>
 					</div>
 				</div>
 				<div class="space-y-2">
@@ -923,12 +965,9 @@
 						bind:value={manualHtml}
 						disabled={manualLoading}
 					></textarea>
-					<div class="flex items-center justify-between text-[11px] text-muted-foreground">
-						<span>현재 길이: {manualHtml.trim().length}자 · 최소 {MIN_MANUAL_HTML}자</span>
-						{#if manualMessage}
-							<p class="text-destructive text-xs">{manualMessage}</p>
-						{/if}
-					</div>
+					{#if manualMessage}
+						<p class="text-sm text-destructive">{manualMessage}</p>
+					{/if}
 				</div>
 			</div>
 
@@ -937,9 +976,7 @@
 				<Button
 					variant="default"
 					onclick={submitManualHtml}
-					disabled={manualLoading ||
-						!manualHtml.trim() ||
-						manualHtml.trim().length < MIN_MANUAL_HTML}
+					disabled={manualLoading || !manualHtml.trim()}
 				>
 					{manualLoading ? '업로드 중...' : '업로드'}
 				</Button>

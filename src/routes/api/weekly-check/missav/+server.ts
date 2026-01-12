@@ -1,5 +1,6 @@
 import { json, error, type RequestHandler } from '@sveltejs/kit';
 import { ingestMissavHtml, scrapeMissav } from '$lib/server/scraper/missav';
+import { WeeklyCheckService } from '$lib/server/services/weekly-check';
 
 const DEFAULT_TARGET = 'https://missav123.to/ko/all?sort=weekly_views';
 
@@ -11,6 +12,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 
 	let targetUrl = DEFAULT_TARGET;
 	let html: string | null = null;
+	let maxPages = 1;
 
 	const body = (await request.json().catch(() => null)) as unknown;
 	if (typeof body === 'object' && body !== null) {
@@ -22,15 +24,30 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		if (typeof rawHtml === 'string') {
 			html = rawHtml;
 		}
+		const rawMaxPages = (body as { maxPages?: unknown }).maxPages;
+		if (typeof rawMaxPages === 'number' && rawMaxPages > 0) {
+			maxPages = rawMaxPages;
+		}
 	}
+
+	const service = new WeeklyCheckService(db);
 
 	try {
 		if (html?.trim()) {
-			const result = await ingestMissavHtml(html, targetUrl, db);
+			// Manual ingestion typically single page content
+			const result = await service.runScraper('missav', targetUrl, async () => {
+				return ingestMissavHtml(html!, targetUrl);
+			});
 			return json({ ok: true, count: result.count, targetUrl, mode: 'manual' });
 		}
 
-		const result = await scrapeMissav(targetUrl, db);
+		// Auto scrape with pagination
+		const result = await service.runScraper(
+			'missav',
+			targetUrl,
+			(url) => scrapeMissav(url),
+			maxPages
+		);
 		return json({ ok: true, count: result.count, targetUrl, mode: 'auto' });
 	} catch (err) {
 		const message = err instanceof Error ? err.message : 'unknown error';
@@ -38,4 +55,3 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		throw error(500, message);
 	}
 };
-
