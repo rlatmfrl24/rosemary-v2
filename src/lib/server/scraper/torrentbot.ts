@@ -1,14 +1,11 @@
 import * as cheerio from 'cheerio';
-import {
-	normalizeSpaces,
-	upsertScraperState,
-	upsertWeeklyPosts,
-	type WeeklyPostInput
-} from './utils';
-
-export type TorrentbotPost = WeeklyPostInput & { site: 'torrentbot' };
+import type { Post } from '$lib/server/services/weekly-check';
 
 const TORRENTBOT_BASE = 'https://torrentbot.com';
+
+function normalizeSpaces(value?: string | null) {
+	return value?.replace(/\s+/g, ' ').trim() ?? '';
+}
 
 function resolveUrl(href?: string | null): string | null {
 	if (!href) return null;
@@ -59,12 +56,12 @@ function formatPostedAt(raw?: string | null): string | null {
 	return date.toISOString().slice(0, 10);
 }
 
-export function parseTorrentbot(html: string): TorrentbotPost[] {
+export function parseTorrentbot(html: string): Post[] {
 	const $ = cheerio.load(html);
-	const results: TorrentbotPost[] = [];
+	const results: Post[] = [];
 	const seen = new Set<string>();
 
-	const pushPost = (post: TorrentbotPost) => {
+	const pushPost = (post: Post) => {
 		if (!post.sourceId || !post.title) return;
 		if (seen.has(post.sourceId)) return;
 		seen.add(post.sourceId);
@@ -127,20 +124,4 @@ export function parseTorrentbot(html: string): TorrentbotPost[] {
 	});
 
 	return results;
-}
-
-export async function saveTorrentbotPosts(posts: TorrentbotPost[], db: App.Locals['db']) {
-	await upsertWeeklyPosts(db, posts);
-}
-
-export async function saveTorrentbotState(
-	db: App.Locals['db'],
-	state: Partial<{
-		targetUrl?: string;
-		status?: string;
-		message?: string | null;
-		lastRun?: number | null;
-	}>
-) {
-	await upsertScraperState(db, 'torrentbot', state);
 }

@@ -1,9 +1,6 @@
 import { error, json, type RequestHandler } from '@sveltejs/kit';
-import {
-	parseTorrentbot,
-	saveTorrentbotPosts,
-	saveTorrentbotState
-} from '$lib/server/scraper/torrentbot';
+import { parseTorrentbot } from '$lib/server/scraper/torrentbot';
+import { WeeklyCheckService } from '$lib/server/services/weekly-check';
 
 export const POST: RequestHandler = async ({ request, locals }) => {
 	const db = locals.db;
@@ -19,33 +16,14 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 
 	if (!html.trim()) throw error(400, 'html is required');
 
-	await saveTorrentbotState(db, {
-		status: 'running',
-		message: '정적 HTML 파싱 중',
-		targetUrl,
-		lastRun: Math.floor(Date.now() / 1000)
-	});
+	const service = new WeeklyCheckService(db);
 
 	try {
-		const posts = parseTorrentbot(html);
-		if (!posts.length) throw new Error('파싱 결과가 없습니다');
-
-		await saveTorrentbotPosts(posts, db);
-		await saveTorrentbotState(db, {
-			status: 'success',
-			message: `성공 (신규 ${posts.length}건)`,
-			targetUrl,
-			lastRun: Math.floor(Date.now() / 1000)
+		const result = await service.runScraper('torrentbot', targetUrl, async () => {
+			return parseTorrentbot(html);
 		});
-
-		return json({ count: posts.length });
+		return json(result);
 	} catch (err) {
-		await saveTorrentbotState(db, {
-			status: 'error',
-			message: err instanceof Error ? err.message : 'unknown error',
-			targetUrl,
-			lastRun: Math.floor(Date.now() / 1000)
-		});
 		throw error(400, err instanceof Error ? err.message : 'parse failed');
 	}
 };

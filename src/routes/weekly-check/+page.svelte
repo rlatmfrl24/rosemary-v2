@@ -41,7 +41,6 @@
 
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import TimeElapsed from '$lib/components/TimeElapsed.svelte';
 	import { Button } from '$lib/components/ui/button';
 	import { Badge, type BadgeVariant } from '$lib/components/ui/badge';
 	import {
@@ -97,10 +96,8 @@
 	};
 
 	const siteOrder: SiteKey[] = ['kissav', 'missav', 'twidouga', 'torrentbot', 'kone'];
-	const autoSites: SiteKey[] = ['kissav', 'missav'];
-	const manualSupportedSites: SiteKey[] = siteOrder.filter((site) =>
-		['missav', 'twidouga', 'torrentbot', 'kone'].includes(site)
-	);
+	const manualSupportedSites: SiteKey[] = ['kone', 'twidouga', 'torrentbot'];
+	const autoSites: SiteKey[] = siteOrder.filter((s) => !manualSupportedSites.includes(s));
 
 	const defaultScraperTargets: Record<SiteKey, string> = {
 		kissav: 'https://kissjav.com/most-popular/?sort_by=video_viewed_week',
@@ -109,8 +106,6 @@
 		torrentbot: 'https://torrentbot.com',
 		kone: 'https://kone.gg/s/pornvideo'
 	};
-
-	const LOCAL_STORAGE_KEY = 'weekly-check-manual-targets';
 
 	const defaultScraperStates: Record<SiteKey, ScraperState> = {
 		kissav: { status: 'idle', message: '대기 중' },
@@ -128,7 +123,7 @@
 	);
 	let scraperTargets = $state<Record<SiteKey, string>>({ ...defaultScraperTargets });
 	let siteFilter = $state<SiteFilter>('all');
-	let readFilter = $state<ReadFilter>('unread');
+	let readFilter = $state<ReadFilter>('all');
 	let showScraperPanel = $state(true);
 	let showThumbnails = $state(true);
 	let manualDialogOpen = $state(false);
@@ -136,8 +131,6 @@
 	let manualHtml = $state('');
 	let manualLoading = $state(false);
 	let manualMessage = $state<string | null>(null);
-	let refreshing = $state(false);
-	const MIN_MANUAL_HTML = 400;
 
 	const statusLabels: Record<ScraperState['status'], string> = {
 		idle: '대기',
@@ -190,8 +183,7 @@
 	});
 
 	$effect(() => {
-		const storedManualTargets = getManualTargetsFromStorage();
-		scraperTargets = { ...deriveTargets(scraperStates), ...storedManualTargets };
+		scraperTargets = deriveTargets(scraperStates);
 	});
 
 	onMount(() => {
@@ -274,30 +266,6 @@
 		return result;
 	}
 
-	function getManualTargetsFromStorage(): Partial<Record<SiteKey, string>> {
-		if (typeof localStorage === 'undefined') return {};
-		try {
-			const raw = localStorage.getItem(LOCAL_STORAGE_KEY);
-			if (!raw) return {};
-			const parsed = JSON.parse(raw) as Partial<Record<SiteKey, string>>;
-			return parsed ?? {};
-		} catch {
-			return {};
-		}
-	}
-
-	function saveManualTargetToStorage(site: SiteKey, value: string) {
-		if (!manualSupportedSites.includes(site)) return;
-		if (typeof localStorage === 'undefined') return;
-		try {
-			const current = getManualTargetsFromStorage();
-			const next = { ...current, [site]: value };
-			localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(next));
-		} catch {
-			// noop
-		}
-	}
-
 	function formatDateTime(date?: Date | null) {
 		if (!date) return '없음';
 		return dateTimeFormatter.format(date);
@@ -347,7 +315,6 @@
 
 	async function resetData() {
 		try {
-			refreshing = true;
 			const res = await fetch('/api/weekly-check', { method: 'DELETE' });
 			if (!res.ok) throw new Error(`reset failed: ${res.status}`);
 
@@ -363,14 +330,11 @@
 			await refetchData();
 		} catch (error) {
 			console.error('weekly-check: reset failed', error);
-		} finally {
-			refreshing = false;
 		}
 	}
 
 	async function refetchData() {
 		try {
-			refreshing = true;
 			const res = await fetch('/api/weekly-check');
 			if (!res.ok) throw new Error(`fetch failed: ${res.status}`);
 			const payload = (await res.json()) as LoadData;
@@ -379,8 +343,6 @@
 			scraperTargets = deriveTargets(scraperStates);
 		} catch (error) {
 			console.error('weekly-check: refetch failed', error);
-		} finally {
-			refreshing = false;
 		}
 	}
 
@@ -419,7 +381,6 @@
 
 	async function setScraperTarget(site: SiteKey, value: string) {
 		scraperTargets = { ...scraperTargets, [site]: value };
-		saveManualTargetToStorage(site, value);
 		try {
 			const res = await fetch('/api/weekly-check', {
 				method: 'PATCH',
@@ -451,10 +412,6 @@
 
 	async function submitManualHtml() {
 		if (!manualHtml.trim()) return;
-		if (manualHtml.trim().length < MIN_MANUAL_HTML) {
-			manualMessage = `본문을 최소 ${MIN_MANUAL_HTML}자 이상 붙여넣어 주세요.`;
-			return;
-		}
 		manualLoading = true;
 		manualMessage = null;
 		try {
@@ -523,30 +480,17 @@
 		<section class="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
 			<div class="space-y-1">
 				<h1 class="text-3xl font-semibold leading-tight">주간 인기 게시물 모니터링</h1>
-				<div class="flex items-center gap-2 text-xs text-muted-foreground">
-					<span>마지막 업데이트: {lastUpdated ? formatDateTime(lastUpdated) : 'N/A'}</span>
-					{#if refreshing}
-						<Badge variant="outline" class="h-5">동기화 중</Badge>
-					{/if}
-				</div>
+				<p class="text-xs text-muted-foreground">
+					마지막 업데이트: {lastUpdated ? formatDateTime(lastUpdated) : 'N/A'} (목업 기준)
+				</p>
 			</div>
 
 			<div class="flex gap-2">
 				<Button variant="outline" size="sm" onclick={toggleThumbnails}>
 					{showThumbnails ? '썸네일 숨기기' : '썸네일 보이기'}
 				</Button>
-				<Button
-					variant="ghost"
-					size="sm"
-					onclick={refetchData}
-					disabled={refreshing}
-					aria-busy={refreshing}
-				>
-					{refreshing ? '새로고침 중...' : '새로고침'}
-				</Button>
-				<Button variant="ghost" size="sm" onclick={resetData} disabled={refreshing}>
-					데이터 초기화
-				</Button>
+				<Button variant="ghost" size="sm" onclick={refetchData}>데이터 새로고침</Button>
+				<Button variant="ghost" size="sm" onclick={resetData}>데이터 초기화</Button>
 			</div>
 		</section>
 
@@ -604,7 +548,9 @@
 											</Button>
 										</div>
 									</div>
-									<TimeElapsed date={state.lastRun} />
+									<p class="text-xs text-muted-foreground">
+										최신 수집: {formatDateTime(state.lastRun)}
+									</p>
 									<div class="grid gap-1">
 										<label
 											class="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground"
@@ -634,69 +580,63 @@
 						<div class="mb-2 flex items-center justify-between gap-2">
 							<div class="flex items-center gap-2">
 								<h3 class="text-sm font-semibold">수동 수집 (정적 HTML 붙여넣기)</h3>
-								<Badge variant="outline" class="text-[11px]">
-									missav / twidouga / torrentbot / kone
-								</Badge>
+								<Badge variant="outline" class="text-[11px]">kone / twidouga / torrentbot</Badge>
 							</div>
 							<p class="text-xs text-muted-foreground">타겟 페이지 열기 → 소스 복사 → 업로드</p>
 						</div>
-						<div class="grid gap-3 sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-4">
+						<div class="grid gap-3 sm:grid-cols-1 lg:grid-cols-3">
 							{#each manualSupportedSites as site}
 								{@const state = scraperStates[site]}
-								{@const isMissav = site === 'missav'}
-								{@const autoState = isMissav ? scraperStates['missav'] : undefined}
-								<!-- MissAV는 자동 수집이 실패했을 때만 표시 (또는 명시적 설정) -->
-								{#if !isMissav || (isMissav && autoState?.status === 'error')}
-									<div
-										class="flex flex-col gap-2 rounded-md border bg-background px-3 py-3 text-sm shadow-sm"
-									>
-										<div class="flex items-start justify-between gap-3">
-											<div class="space-y-1">
-												<div class="flex items-center gap-2 text-base font-medium capitalize">
-													<span>{siteLabels[site]}</span>
-												</div>
-												<p class="text-xs text-muted-foreground">
-													{state.message ?? '대기 중'}
-												</p>
+								<div
+									class="flex flex-col gap-2 rounded-md border bg-background px-3 py-3 text-sm shadow-sm"
+								>
+									<div class="flex items-start justify-between gap-3">
+										<div class="space-y-1">
+											<div class="flex items-center gap-2 text-base font-medium capitalize">
+												<span>{siteLabels[site]}</span>
 											</div>
-											<div class="flex flex-col items-end gap-1">
-												<Badge variant={statusBadgeVariants[state.status]}>
-													{statusLabels[state.status]}
-												</Badge>
-												<Button
-													size="sm"
-													variant="default"
-													disabled={manualLoading}
-													onclick={() => openManualDialog(site)}
-												>
-													정적 HTML 업로드
-												</Button>
-											</div>
+											<p class="text-xs text-muted-foreground">
+												{state.message ?? '대기 중'}
+											</p>
 										</div>
-										<TimeElapsed date={state.lastRun} />
-
-										<div class="grid gap-1 mt-1">
-											<label
-												class="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground"
-												for={`scraper-target-${site}`}
+										<div class="flex flex-col items-end gap-1">
+											<Badge variant={statusBadgeVariants[state.status]}>
+												{statusLabels[state.status]}
+											</Badge>
+											<Button
+												size="sm"
+												variant="default"
+												disabled={manualLoading}
+												onclick={() => openManualDialog(site)}
 											>
-												타겟 URL
-											</label>
-											<div class="flex gap-2">
-												<input
-													id={`scraper-target-${site}`}
-													type="text"
-													class="w-full rounded-md border bg-background px-2 py-1 text-sm focus-visible:border-primary focus-visible:outline-none"
-													value={scraperTargets[site]}
-													oninput={(event) => setScraperTarget(site, event.currentTarget.value)}
-												/>
-												<Button size="sm" variant="outline" onclick={() => openTargetPage(site)}>
-													페이지 열기
-												</Button>
-											</div>
+												정적 HTML 업로드
+											</Button>
 										</div>
 									</div>
-								{/if}
+									<p class="text-xs text-muted-foreground">
+										최신 수집: {formatDateTime(state.lastRun)}
+									</p>
+									<div class="grid gap-1">
+										<label
+											class="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground"
+											for={`scraper-target-${site}`}
+										>
+											타겟 URL
+										</label>
+										<div class="flex gap-2">
+											<input
+												id={`scraper-target-${site}`}
+												type="text"
+												class="w-full rounded-md border bg-background px-2 py-1 text-sm focus-visible:border-primary focus-visible:outline-none"
+												value={scraperTargets[site]}
+												oninput={(event) => setScraperTarget(site, event.currentTarget.value)}
+											/>
+											<Button size="sm" variant="outline" onclick={() => openTargetPage(site)}>
+												페이지 열기
+											</Button>
+										</div>
+									</div>
+								</div>
 							{/each}
 						</div>
 					</div>
@@ -713,7 +653,7 @@
 				<div class="space-y-1">
 					<h2 class="text-lg font-semibold">주간 인기 게시물</h2>
 					<p class="text-sm text-muted-foreground">
-						읽음 처리, 좋아요 토글, 썸네일 토글을 바로 시험할 수 있습니다.
+						각 행은 목업 데이터이며 읽음 처리, 좋아요 토글, 썸네일 토글을 테스트할 수 있습니다.
 					</p>
 				</div>
 				<div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
@@ -747,132 +687,122 @@
 				</p>
 			</div>
 
-			{#if !filteredRows.length}
-				<div class="rounded-md border bg-muted/30 p-6 text-center text-sm text-muted-foreground">
-					표시할 게시물이 없습니다. 새로고침 또는 수동 수집을 시도하세요.
-				</div>
-			{:else}
-				<div class="overflow-auto rounded-lg border">
-					<Table class="min-w-[960px] text-sm">
-						<TableHeader class="sticky top-0 z-10 bg-card">
-							<TableRow>
-								<TableHead class="w-12">#</TableHead>
-								<TableHead class="w-24">사이트</TableHead>
-								<TableHead>게시물 제목</TableHead>
-								<TableHead class="w-36 text-center">썸네일</TableHead>
-								<TableHead class="w-24">게시일</TableHead>
-								<TableHead class="w-24 text-center">좋아요</TableHead>
-								<TableHead class="w-24 text-center">읽음</TableHead>
-								<TableHead class="w-24 text-center">상태</TableHead>
-								<TableHead class="w-32">수집 일자</TableHead>
-							</TableRow>
-						</TableHeader>
-						<TableBody>
-							{#each filteredRows as row, index}
-								{@const state = scraperStates[row.site]}
-								<tr
-									data-state={row.read ? 'selected' : undefined}
-									class={`text-sm hover:bg-muted/50 data-[state=selected]:bg-muted border-b transition-colors ${row.url ? 'cursor-pointer' : ''}`}
-									onclick={() => navigateToUrl(row.site, row.url)}
+			<Table>
+				<TableHeader>
+					<TableRow>
+						<TableHead class="w-12">#</TableHead>
+						<TableHead class="w-28">사이트</TableHead>
+						<TableHead>게시물 제목</TableHead>
+						<TableHead class="w-36 text-center">썸네일</TableHead>
+						<TableHead class="w-28">게시일</TableHead>
+						<TableHead class="w-28 text-center">좋아요</TableHead>
+						<TableHead class="w-24 text-center">읽음</TableHead>
+						<TableHead class="w-24 text-center">상태</TableHead>
+						<TableHead class="w-32">수집 일자</TableHead>
+					</TableRow>
+				</TableHeader>
+				<TableBody>
+					{#each filteredRows as row, index}
+						{@const state = scraperStates[row.site]}
+						<tr
+							data-state={row.read ? 'selected' : undefined}
+							class={`hover:bg-muted/50 data-[state=selected]:bg-muted border-b transition-colors ${row.url ? 'cursor-pointer' : ''}`}
+							onclick={() => navigateToUrl(row.site, row.url)}
+						>
+							<TableCell class="text-muted-foreground">{index + 1}</TableCell>
+							<TableCell>
+								<div class="flex flex-col gap-1">
+									<Badge variant="outline" class="w-fit capitalize">{siteLabels[row.site]}</Badge>
+								</div>
+							</TableCell>
+							<TableCell>
+								<div class="relative group max-w-[720px]">
+									<p class="font-medium leading-snug truncate" title={row.title}>
+										{row.title}
+									</p>
+									<div
+										class="pointer-events-none absolute left-0 top-full z-10 mt-1 hidden max-w-xs whitespace-normal rounded-md border bg-card px-3 py-2 text-xs text-foreground shadow-md group-hover:block"
+									>
+										{row.title}
+									</div>
+								</div>
+							</TableCell>
+							<TableCell class="text-center">
+								{#if showThumbnails}
+									<div class="relative inline-flex items-center justify-center group">
+										<img
+											src={getThumbnail(row.site, row.thumbnail)}
+											alt={`${siteLabels[row.site]} thumbnail`}
+											class="mx-auto h-16 w-24 rounded-md border object-cover transition duration-200 group-hover:scale-110"
+											loading="lazy"
+										/>
+										<div
+											class="pointer-events-none absolute left-1/2 bottom-full mb-2 hidden w-44 -translate-x-1/2 flex-col items-center gap-1 rounded-xl border bg-card/90 p-2 text-[11px] text-muted-foreground shadow-lg backdrop-blur group-hover:flex"
+										>
+											<img
+												src={getThumbnail(row.site, row.thumbnail)}
+												alt="preview"
+												class="h-32 w-48 rounded-md border object-cover"
+											/>
+											<span>썸네일 미리보기</span>
+										</div>
+									</div>
+								{:else}
+									<span class="text-xs text-muted-foreground">숨김</span>
+								{/if}
+							</TableCell>
+							<TableCell>{formatPostedAt(row.postedAt)}</TableCell>
+							<TableCell class="text-center">
+								<Button
+									size="sm"
+									variant={row.liked ? 'secondary' : 'ghost'}
+									onclick={(event) => {
+										event.stopPropagation();
+										void toggleLike(row.id);
+									}}
+									aria-pressed={row.liked}
+									class={row.liked ? 'text-destructive' : 'text-muted-foreground'}
 								>
-									<TableCell class="text-muted-foreground">{index + 1}</TableCell>
-									<TableCell>
-										<div class="flex flex-col gap-1">
-											<Badge variant="outline" class="w-fit capitalize"
-												>{siteLabels[row.site]}</Badge
-											>
-										</div>
-									</TableCell>
-									<TableCell>
-										<div class="relative group max-w-[720px]">
-											<p class="font-medium leading-snug truncate" title={row.title}>
-												{row.title}
-											</p>
-											<div
-												class="pointer-events-none absolute left-0 top-full z-10 mt-1 hidden max-w-xs whitespace-normal rounded-md border bg-card px-3 py-2 text-xs text-foreground shadow-md group-hover:block"
-											>
-												{row.title}
-											</div>
-										</div>
-									</TableCell>
-									<TableCell class="text-center">
-										{#if showThumbnails}
-											<div class="relative inline-flex items-center justify-center group">
-												<img
-													src={getThumbnail(row.site, row.thumbnail)}
-													alt={`${siteLabels[row.site]} thumbnail`}
-													class="mx-auto h-16 w-24 rounded-md border object-cover transition duration-200 group-hover:scale-110"
-													loading="lazy"
-												/>
-												<div
-													class="pointer-events-none absolute left-1/2 bottom-full mb-2 hidden w-44 -translate-x-1/2 flex-col items-center gap-1 rounded-xl border bg-card/90 p-2 text-[11px] text-muted-foreground shadow-lg backdrop-blur group-hover:flex"
-												>
-													<img
-														src={getThumbnail(row.site, row.thumbnail)}
-														alt="preview"
-														class="h-32 w-48 rounded-md border object-cover"
-													/>
-													<span>썸네일 미리보기</span>
-												</div>
-											</div>
-										{:else}
-											<span class="text-xs text-muted-foreground">숨김</span>
-										{/if}
-									</TableCell>
-									<TableCell>{formatPostedAt(row.postedAt)}</TableCell>
-									<TableCell class="text-center">
-										<Button
-											size="sm"
-											variant={row.liked ? 'secondary' : 'ghost'}
-											onclick={(event) => {
-												event.stopPropagation();
-												void toggleLike(row.id);
-											}}
-											aria-pressed={row.liked}
-											class={row.liked ? 'text-destructive' : 'text-muted-foreground'}
-										>
-											<svg
-												xmlns="http://www.w3.org/2000/svg"
-												viewBox="0 0 24 24"
-												fill="currentColor"
-												class="h-4 w-4"
-												aria-hidden="true"
-											>
-												<path
-													fill-rule="evenodd"
-													d="M12 21s-1-.45-2.1-1.2C7.4 18.8 4 16.1 4 11.7 4 8.3 6.3 6 9.2 6 10.7 6 12 6.9 12.8 7.9 13.6 6.9 14.9 6 16.4 6 19.3 6 21.6 8.3 21.6 11.7c0 4.4-3.4 7.1-5.9 8.1C13 20.55 12 21 12 21z"
-													clip-rule="evenodd"
-												/>
-											</svg>
-											<span class="sr-only">좋아요</span>
-										</Button>
-									</TableCell>
-									<TableCell class="text-center">
-										<Button
-											size="sm"
-											variant={row.read ? 'secondary' : 'outline'}
-											onclick={(event) => {
-												event.stopPropagation();
-												void toggleRead(row.id);
-											}}
-										>
-											{row.read ? '읽음' : '읽지 않음'}
-										</Button>
-									</TableCell>
-									<TableCell class="text-center">
-										<Badge variant={statusBadgeVariants[state.status]}>
-											{statusLabels[state.status]}
-										</Badge>
-									</TableCell>
-									<TableCell class="text-xs text-muted-foreground">
-										{formatDateTime(state.lastRun)}
-									</TableCell>
-								</tr>
-							{/each}
-						</TableBody>
-					</Table>
-				</div>
-			{/if}
+									<svg
+										xmlns="http://www.w3.org/2000/svg"
+										viewBox="0 0 24 24"
+										fill="currentColor"
+										class="h-4 w-4"
+										aria-hidden="true"
+									>
+										<path
+											fill-rule="evenodd"
+											d="M12 21s-1-.45-2.1-1.2C7.4 18.8 4 16.1 4 11.7 4 8.3 6.3 6 9.2 6 10.7 6 12 6.9 12.8 7.9 13.6 6.9 14.9 6 16.4 6 19.3 6 21.6 8.3 21.6 11.7c0 4.4-3.4 7.1-5.9 8.1C13 20.55 12 21 12 21z"
+											clip-rule="evenodd"
+										/>
+									</svg>
+									<span class="sr-only">좋아요</span>
+								</Button>
+							</TableCell>
+							<TableCell class="text-center">
+								<Button
+									size="sm"
+									variant={row.read ? 'secondary' : 'outline'}
+									onclick={(event) => {
+										event.stopPropagation();
+										void toggleRead(row.id);
+									}}
+								>
+									{row.read ? '읽음' : '읽지 않음'}
+								</Button>
+							</TableCell>
+							<TableCell class="text-center">
+								<Badge variant={statusBadgeVariants[state.status]}>
+									{statusLabels[state.status]}
+								</Badge>
+							</TableCell>
+							<TableCell class="text-xs text-muted-foreground">
+								{formatDateTime(state.lastRun)}
+							</TableCell>
+						</tr>
+					{/each}
+				</TableBody>
+			</Table>
 		</section>
 	</div>
 </div>
@@ -884,7 +814,7 @@
 				<div>
 					<h3 class="text-lg font-semibold">정적 HTML 업로드</h3>
 					<p class="text-sm text-muted-foreground">
-						missav / twidouga / torrentbot / kone 정적 HTML을 붙여 넣어 수동 수집합니다.
+						twidouga / torrentbot 정적 HTML을 붙여 넣어 수동 수집합니다.
 					</p>
 				</div>
 				<Button variant="ghost" size="sm" onclick={closeManualDialog} disabled={manualLoading}>
@@ -908,11 +838,9 @@
 						{/each}
 					</select>
 					<div class="text-[11px] text-muted-foreground space-y-1">
-						<p>- missav: static/missav_example.html</p>
-						<p>- kone: static/kone_example.html</p>
-						<p>- twidouga: static/twidouga_example.html</p>
-						<p>- torrentbot: static/torrentbot_example.html</p>
-						<p>페이지 소스 전체 복사 후 붙여넣기</p>
+						<p>- kone: @static/kone.html</p>
+						<p>- twidouga: @static/twdouga_example.html</p>
+						<p>- torrentbot: @static/torrentbot_example.html</p>
 					</div>
 				</div>
 				<div class="space-y-2">
@@ -926,12 +854,9 @@
 						bind:value={manualHtml}
 						disabled={manualLoading}
 					></textarea>
-					<div class="flex items-center justify-between text-[11px] text-muted-foreground">
-						<span>현재 길이: {manualHtml.trim().length}자 · 최소 {MIN_MANUAL_HTML}자</span>
-						{#if manualMessage}
-							<p class="text-destructive text-xs">{manualMessage}</p>
-						{/if}
-					</div>
+					{#if manualMessage}
+						<p class="text-sm text-destructive">{manualMessage}</p>
+					{/if}
 				</div>
 			</div>
 
@@ -940,9 +865,7 @@
 				<Button
 					variant="default"
 					onclick={submitManualHtml}
-					disabled={manualLoading ||
-						!manualHtml.trim() ||
-						manualHtml.trim().length < MIN_MANUAL_HTML}
+					disabled={manualLoading || !manualHtml.trim()}
 				>
 					{manualLoading ? '업로드 중...' : '업로드'}
 				</Button>

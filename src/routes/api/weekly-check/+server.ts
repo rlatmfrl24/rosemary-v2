@@ -2,29 +2,14 @@ import { error, json, type RequestHandler } from '@sveltejs/kit';
 import { weekly_check_posts, weekly_check_scraper_state } from '$lib/server/db/schema';
 import { desc, eq, sql } from 'drizzle-orm';
 
-type SiteKey = 'kissav' | 'missav' | 'twidouga' | 'torrentbot' | 'kone';
-
-const allowedSites: SiteKey[] = ['kissav', 'missav', 'twidouga', 'torrentbot', 'kone'];
-
-const nowEpoch = () => sql`(strftime('%s', 'now'))`;
-
-const isSiteKey = (value: unknown): value is SiteKey =>
-	typeof value === 'string' && allowedSites.includes(value as SiteKey);
-
-const parseBoolean = (value: unknown) =>
-	typeof value === 'boolean'
-		? value
-		: typeof value === 'number'
-			? Boolean(value)
-			: typeof value === 'string'
-				? value === 'true' || value === '1'
-				: undefined;
-
 export const GET: RequestHandler = async ({ locals }) => {
 	const db = locals.db;
 	if (!db) throw error(500, 'Database not available');
 
-	const posts = await db.select().from(weekly_check_posts).orderBy(desc(weekly_check_posts.createdAt));
+	const posts = await db
+		.select()
+		.from(weekly_check_posts)
+		.orderBy(desc(weekly_check_posts.createdAt));
 	const scraperStates = await db.select().from(weekly_check_scraper_state);
 
 	return json({ posts, scraperStates });
@@ -36,97 +21,72 @@ export const PATCH: RequestHandler = async ({ request, locals }) => {
 
 	const body = (await request.json().catch(() => null)) as unknown;
 
-	const parseTargetUpdate = (value: unknown) => {
-		if (
-			typeof value !== 'object' ||
-			value === null ||
-			!isSiteKey((value as { site?: unknown }).site) ||
-			typeof (value as { targetUrl?: unknown }).targetUrl !== 'string'
-		) {
-			return null;
-		}
-		const targetUrl = (value as { targetUrl: string }).targetUrl.trim();
-		if (!targetUrl) return null;
-		return { site: (value as { site: SiteKey }).site, targetUrl };
+	const isTargetUpdate = (value: unknown): value is { site: string; targetUrl: string } => {
+		return (
+			typeof value === 'object' &&
+			value !== null &&
+			typeof (value as { site?: unknown }).site === 'string' &&
+			typeof (value as { targetUrl?: unknown }).targetUrl === 'string'
+		);
 	};
 
 	// Update scraper target URL
-	const targetUpdate = parseTargetUpdate(body);
-	if (targetUpdate) {
+	if (isTargetUpdate(body)) {
 		const [state] = await db
 			.insert(weekly_check_scraper_state)
 			.values({
-				site: targetUpdate.site,
-				targetUrl: targetUpdate.targetUrl,
+				site: body.site,
+				targetUrl: body.targetUrl,
 				status: 'idle',
-				message: '타겟 업데이트',
-				lastRun: nowEpoch()
+				message: '타겟 저장',
+				lastRun: sql`(strftime('%s', 'now'))`
 			})
 			.onConflictDoUpdate({
 				target: weekly_check_scraper_state.site,
 				set: {
-					targetUrl: targetUpdate.targetUrl,
+					targetUrl: body.targetUrl,
 					message: '타겟 업데이트',
-					lastRun: nowEpoch()
+					lastRun: sql`(strftime('%s', 'now'))`
 				}
 			})
-			.returning({
-				id: weekly_check_scraper_state.id,
-				site: weekly_check_scraper_state.site,
-				targetUrl: weekly_check_scraper_state.targetUrl,
-				status: weekly_check_scraper_state.status,
-				message: weekly_check_scraper_state.message,
-				lastRun: weekly_check_scraper_state.lastRun
-			});
+			.returning();
 
 		return json({ scraperState: state });
 	}
 
-	const parsePostUpdate = (value: unknown) => {
-		if (typeof value !== 'object' || value === null) return null;
+	// Update post flags (liked/read)
+	const idNumber =
+		typeof (body as { id?: unknown })?.id === 'number'
+			? (body as { id: number }).id
+			: typeof (body as { id?: unknown })?.id === 'string'
+				? Number((body as { id: string }).id)
+				: null;
 
-		const rawId = (value as { id?: unknown }).id;
-		const id =
-			typeof rawId === 'number' ? rawId : typeof rawId === 'string' ? Number(rawId) : undefined;
-
-		if (!Number.isFinite(id)) return null;
-
-		const liked = parseBoolean((value as { liked?: unknown }).liked);
-		const read = parseBoolean((value as { read?: unknown }).read);
-
+	if (idNumber !== null && Number.isFinite(idNumber)) {
 		const updates: Partial<typeof weekly_check_posts.$inferInsert> = {};
-		if (typeof liked !== 'undefined') updates.liked = liked;
-		if (typeof read !== 'undefined') updates.read = read;
+		if (typeof (body as { liked?: unknown })?.liked !== 'undefined') {
+			updates.liked = Boolean((body as { liked?: unknown }).liked);
+		}
+		if (typeof (body as { read?: unknown })?.read !== 'undefined') {
+			updates.read = Boolean((body as { read?: unknown }).read);
+		}
 
-		if (!Object.keys(updates).length) return null;
+		if (!Object.keys(updates).length) {
+			throw error(400, 'No updates provided');
+		}
 
-		return { id: Number(id), updates };
-	};
-
-	const postUpdate = parsePostUpdate(body);
-	if (postUpdate) {
 		const [updated] = await db
 			.update(weekly_check_posts)
-			.set(postUpdate.updates)
-			.where(eq(weekly_check_posts.id, postUpdate.id))
-			.returning({
-				id: weekly_check_posts.id,
-				site: weekly_check_posts.site,
-				sourceId: weekly_check_posts.sourceId,
-				title: weekly_check_posts.title,
-				url: weekly_check_posts.url,
-				thumbnail: weekly_check_posts.thumbnail,
-				postedAt: weekly_check_posts.postedAt,
-				liked: weekly_check_posts.liked,
-				read: weekly_check_posts.read
-			});
+			.set(updates)
+			.where(eq(weekly_check_posts.id, idNumber))
+			.returning();
 
 		if (!updated) throw error(404, 'Post not found');
 
 		return json({ post: updated });
 	}
 
-	throw error(400, 'Invalid request payload');
+	throw error(400, 'Invalid request');
 };
 
 export const DELETE: RequestHandler = async ({ locals }) => {
@@ -139,4 +99,3 @@ export const DELETE: RequestHandler = async ({ locals }) => {
 
 	return json({ ok: true });
 };
-
