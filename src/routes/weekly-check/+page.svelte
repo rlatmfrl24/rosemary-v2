@@ -595,57 +595,53 @@
 											</Button>
 										</div>
 									</div>
-									<p class="text-xs text-muted-foreground">
-										최신 수집: {formatDateTime(state.lastRun)}
-									</p>
 									<p
 										class={`text-xs ${showStaleReminder ? 'text-warning-foreground font-semibold' : 'text-muted-foreground'}`}
 									>
 										수집 경과: {elapsedLabel}
 									</p>
-									<div class="grid gap-2">
-										<div class="flex flex-wrap gap-3">
-											<div class="flex-1 min-w-0 space-y-1">
-												<label
-													class="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground"
-													for={`scraper-target-${site}`}
-												>
-													타겟 URL
-												</label>
-												<div class="flex flex-wrap gap-2">
-													<input
-														id={`scraper-target-${site}`}
-														type="text"
-														class="flex-1 min-w-0 rounded-md border bg-background px-2 py-1 text-sm focus-visible:border-primary focus-visible:outline-none"
-														value={scraperTargets[site]}
-														oninput={(event) => setScraperTarget(site, event.currentTarget.value)}
-													/>
-													<Button size="sm" variant="outline" onclick={() => openTargetPage(site)}>
-														페이지 열기
-													</Button>
-												</div>
+									<div class="flex flex-wrap gap-3 items-end justify-between">
+										<div class="flex-1 min-w-0 space-y-1">
+											<label
+												class="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground"
+												for={`scraper-target-${site}`}
+											>
+												타겟 URL
+											</label>
+											<div class="flex gap-2">
+												<input
+													id={`scraper-target-${site}`}
+													type="text"
+													class="flex-1 min-w-0 rounded-md border bg-background px-2 py-1 text-sm focus-visible:border-primary focus-visible:outline-none"
+													value={scraperTargets[site]}
+													oninput={(event) => setScraperTarget(site, event.currentTarget.value)}
+												/>
 											</div>
-											<div class="w-full max-w-[220px] space-y-1">
-												<label
-													class="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground"
-													for={`scraper-max-pages-${site}`}
-												>
-													최대 페이지 (1부터 순회)
-												</label>
-												<div class="flex flex-wrap gap-2">
-													<input
-														id={`scraper-max-pages-${site}`}
-														type="number"
-														min="1"
-														step="1"
-														inputmode="numeric"
-														class="w-full min-w-0 rounded-md border bg-background px-2 py-1 text-sm focus-visible:border-primary focus-visible:outline-none"
-														value={scraperMaxPages[site]}
-														oninput={(event) =>
-															setMaxPages(site, event.currentTarget.valueAsNumber)}
-													/>
-												</div>
+										</div>
+										<div class="w-full max-w-[220px] space-y-1">
+											<label
+												class="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground"
+												for={`scraper-max-pages-${site}`}
+											>
+												최대 페이지
+											</label>
+											<div class="flex gap-2">
+												<input
+													id={`scraper-max-pages-${site}`}
+													type="number"
+													min="1"
+													step="1"
+													inputmode="numeric"
+													class="w-full min-w-0 rounded-md border bg-background px-2 py-1 text-sm focus-visible:border-primary focus-visible:outline-none"
+													value={scraperMaxPages[site]}
+													oninput={(event) => setMaxPages(site, event.currentTarget.valueAsNumber)}
+												/>
 											</div>
+										</div>
+										<div class="flex flex-col items-end gap-1">
+											<Button size="sm" variant="outline" onclick={() => openTargetPage(site)}>
+												페이지 열기
+											</Button>
 										</div>
 									</div>
 									{#if showStaleReminder}
@@ -707,29 +703,30 @@
 											</Button>
 										</div>
 									</div>
-									<p class="text-xs text-muted-foreground">
-										최신 수집: {formatDateTime(state.lastRun)}
-									</p>
 									<p
 										class={`text-xs ${showStaleReminder ? 'text-warning-foreground font-semibold' : 'text-muted-foreground'}`}
 									>
 										수집 경과: {elapsedLabel}
 									</p>
-									<div class="grid gap-1">
-										<label
-											class="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground"
-											for={`scraper-target-${site}`}
-										>
-											타겟 URL
-										</label>
-										<div class="flex gap-2">
-											<input
-												id={`scraper-target-${site}`}
-												type="text"
-												class="w-full rounded-md border bg-background px-2 py-1 text-sm focus-visible:border-primary focus-visible:outline-none"
-												value={scraperTargets[site]}
-												oninput={(event) => setScraperTarget(site, event.currentTarget.value)}
-											/>
+									<div class="flex flex-wrap gap-3 items-end justify-between">
+										<div class="flex-1 min-w-0 space-y-1">
+											<label
+												class="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground"
+												for={`scraper-target-${site}`}
+											>
+												타겟 URL
+											</label>
+											<div class="flex gap-2">
+												<input
+													id={`scraper-target-${site}`}
+													type="text"
+													class="flex-1 min-w-0 rounded-md border bg-background px-2 py-1 text-sm focus-visible:border-primary focus-visible:outline-none"
+													value={scraperTargets[site]}
+													oninput={(event) => setScraperTarget(site, event.currentTarget.value)}
+												/>
+											</div>
+										</div>
+										<div class="flex flex-col items-end gap-1">
 											<Button size="sm" variant="outline" onclick={() => openTargetPage(site)}>
 												페이지 열기
 											</Button>
