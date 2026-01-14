@@ -272,105 +272,206 @@
 				</div>
 			</div>
 		</div>
-		<Table class="table-fixed min-w-[800px]">
-			<TableHeader>
-				<TableRow>
-					<TableHead class="w-[60px] whitespace-nowrap">ID</TableHead>
-					{#if showThumbnails}
-						<TableHead class="w-[110px] whitespace-nowrap">썸네일</TableHead>
-					{/if}
-					<TableHead class="min-w-[200px]">제목 / 원본 정보</TableHead>
-					<TableHead class="w-[120px] whitespace-nowrap text-center">업로드일</TableHead>
-					<TableHead class="w-[100px] whitespace-nowrap text-center">상태</TableHead>
-				</TableRow>
-			</TableHeader>
-			<TableBody>
-				{#if filteredPosts.length === 0}
+
+		<!-- Desktop Table View (md and up) -->
+		<div class="hidden md:block overflow-x-auto">
+			<Table class="table-fixed min-w-[800px]">
+				<TableHeader>
 					<TableRow>
-						<TableCell
-							colspan={showThumbnails ? 5 : 4}
-							class="h-24 text-center text-muted-foreground"
-						>
-							{filter === 'unread' ? '안읽은 게시물이 없습니다.' : '수집된 데이터가 없습니다.'}
-						</TableCell>
+						<TableHead class="w-[60px] whitespace-nowrap">ID</TableHead>
+						{#if showThumbnails}
+							<TableHead class="w-[110px] whitespace-nowrap">썸네일</TableHead>
+						{/if}
+						<TableHead class="min-w-[200px]">제목 / 원본 정보</TableHead>
+						<TableHead class="w-[120px] whitespace-nowrap text-center">업로드일</TableHead>
+						<TableHead class="w-[100px] whitespace-nowrap text-center">상태</TableHead>
 					</TableRow>
-				{:else}
-					{#each filteredPosts as post (post.id)}
-						<TableRow
-							class="transition-colors hover:bg-muted/50 {post.read
-								? 'bg-muted/40 opacity-60'
-								: ''}"
-						>
+				</TableHeader>
+				<TableBody>
+					{#if filteredPosts.length === 0}
+						<TableRow>
 							<TableCell
-								class="font-mono text-xs text-muted-foreground whitespace-nowrap overflow-hidden text-ellipsis"
+								colspan={showThumbnails ? 5 : 4}
+								class="h-24 text-center text-muted-foreground"
 							>
-								{post.id}
+								{filter === 'unread' ? '안읽은 게시물이 없습니다.' : '수집된 데이터가 없습니다.'}
 							</TableCell>
-							{#if showThumbnails}
+						</TableRow>
+					{:else}
+						{#each filteredPosts as post (post.id)}
+							<TableRow
+								class="transition-colors hover:bg-muted/50 {post.read
+									? 'bg-muted/40 opacity-60'
+									: ''}"
+							>
+								<TableCell
+									class="font-mono text-xs text-muted-foreground whitespace-nowrap overflow-hidden text-ellipsis"
+								>
+									{post.id}
+								</TableCell>
+								{#if showThumbnails}
+									<TableCell>
+										<div class="relative aspect-video w-24 overflow-hidden rounded bg-muted">
+											<img
+												src={getThumbnail(post.thumbnail)}
+												alt=""
+												class="h-full w-full object-cover transition-transform hover:scale-105"
+												loading="lazy"
+											/>
+										</div>
+									</TableCell>
+								{/if}
 								<TableCell>
-									<div class="relative aspect-video w-24 overflow-hidden rounded bg-muted">
-										<img
-											src={getThumbnail(post.thumbnail)}
-											alt=""
-											class="h-full w-full object-cover transition-transform hover:scale-105"
-											loading="lazy"
-										/>
+									<div class="flex flex-col gap-1 pr-4">
+										<button
+											class="text-left font-medium leading-snug hover:underline hover:text-primary transition-colors line-clamp-2"
+											onclick={() => onOpenLink(post.url)}
+										>
+											{post.title}
+										</button>
+										<div class="flex items-center gap-2 text-xs text-muted-foreground flex-wrap">
+											<Badge variant="outline" class="text-[10px] px-1 py-0 h-5 whitespace-nowrap">
+												{post.sourceId}
+											</Badge>
+											{#if post.url}
+												<span class="truncate max-w-[300px] opacity-70">{post.url}</span>
+											{/if}
+										</div>
 									</div>
 								</TableCell>
-							{/if}
-							<TableCell>
-								<div class="flex flex-col gap-1 pr-4">
-									<button
-										class="text-left font-medium leading-snug hover:underline hover:text-primary transition-colors line-clamp-2"
-										onclick={() => onOpenLink(post.url)}
-									>
-										{post.title}
-									</button>
-									<div class="flex items-center gap-2 text-xs text-muted-foreground flex-wrap">
-										<Badge variant="outline" class="text-[10px] px-1 py-0 h-5 whitespace-nowrap">
-											{post.sourceId}
-										</Badge>
-										{#if post.url}
-											<span class="truncate max-w-[300px] opacity-70">{post.url}</span>
-										{/if}
+								<TableCell class="text-center text-xs text-muted-foreground whitespace-nowrap">
+									{post.postedAt || '-'}
+								</TableCell>
+								<TableCell class="text-center whitespace-nowrap">
+									<div class="flex items-center justify-center gap-1">
+										<Button
+											variant={post.read ? 'secondary' : 'ghost'}
+											size="icon"
+											class="h-8 w-8 {post.read ? 'text-muted-foreground' : 'text-foreground'}"
+											onclick={() => onToggleRead(post.id)}
+											title="읽음 상태 토글"
+										>
+											{#if post.read}
+												<EyeOff class="h-4 w-4" />
+											{:else}
+												<Eye class="h-4 w-4" />
+											{/if}
+										</Button>
+										<Button
+											variant="ghost"
+											size="icon"
+											class="h-8 w-8 {post.liked
+												? 'text-red-500 hover:text-red-600'
+												: 'text-muted-foreground'}"
+											onclick={() => onToggleLike(post.id)}
+											title="좋아요 토글"
+										>
+											<Heart class="h-4 w-4 {post.liked ? 'fill-current' : ''}" />
+										</Button>
 									</div>
-								</div>
-							</TableCell>
-							<TableCell class="text-center text-xs text-muted-foreground whitespace-nowrap">
-								{post.postedAt || '-'}
-							</TableCell>
-							<TableCell class="text-center whitespace-nowrap">
-								<div class="flex items-center justify-center gap-1">
+								</TableCell>
+							</TableRow>
+						{/each}
+					{/if}
+				</TableBody>
+			</Table>
+		</div>
+
+		<!-- Mobile Card View (below md) -->
+		<div class="md:hidden">
+			{#if filteredPosts.length === 0}
+				<div class="p-8 text-center text-muted-foreground">
+					{filter === 'unread' ? '안읽은 게시물이 없습니다.' : '수집된 데이터가 없습니다.'}
+				</div>
+			{:else}
+				<div class="divide-y">
+					{#each filteredPosts as post (post.id)}
+						<div
+							class="p-4 transition-colors {post.read
+								? 'bg-muted/40 opacity-60'
+								: 'hover:bg-muted/50'}"
+						>
+							<!-- Card Header: ID and Actions -->
+							<div class="flex items-start justify-between gap-2 mb-3">
+								<Badge variant="outline" class="text-[10px] px-1.5 py-0.5 font-mono">
+									ID: {post.id}
+								</Badge>
+								<div class="flex items-center gap-1">
 									<Button
 										variant={post.read ? 'secondary' : 'ghost'}
 										size="icon"
-										class="h-8 w-8 {post.read ? 'text-muted-foreground' : 'text-foreground'}"
+										class="h-7 w-7 {post.read ? 'text-muted-foreground' : 'text-foreground'}"
 										onclick={() => onToggleRead(post.id)}
 										title="읽음 상태 토글"
 									>
 										{#if post.read}
-											<EyeOff class="h-4 w-4" />
+											<EyeOff class="h-3.5 w-3.5" />
 										{:else}
-											<Eye class="h-4 w-4" />
+											<Eye class="h-3.5 w-3.5" />
 										{/if}
 									</Button>
 									<Button
 										variant="ghost"
 										size="icon"
-										class="h-8 w-8 {post.liked
+										class="h-7 w-7 {post.liked
 											? 'text-red-500 hover:text-red-600'
 											: 'text-muted-foreground'}"
 										onclick={() => onToggleLike(post.id)}
 										title="좋아요 토글"
 									>
-										<Heart class="h-4 w-4 {post.liked ? 'fill-current' : ''}" />
+										<Heart class="h-3.5 w-3.5 {post.liked ? 'fill-current' : ''}" />
 									</Button>
 								</div>
-							</TableCell>
-						</TableRow>
+							</div>
+
+							<!-- Card Content -->
+							<div class="space-y-3">
+								<!-- Thumbnail (if enabled) -->
+								{#if showThumbnails}
+									<div class="relative aspect-video w-full overflow-hidden rounded-md bg-muted">
+										<img
+											src={getThumbnail(post.thumbnail)}
+											alt=""
+											class="h-full w-full object-cover"
+											loading="lazy"
+										/>
+									</div>
+								{/if}
+
+								<!-- Title -->
+								<button
+									class="text-left font-medium leading-snug hover:underline hover:text-primary transition-colors line-clamp-3 w-full"
+									onclick={() => onOpenLink(post.url)}
+								>
+									{post.title}
+								</button>
+
+								<!-- Metadata -->
+								<div class="flex flex-col gap-2 text-xs text-muted-foreground">
+									<div class="flex items-center gap-2">
+										<span class="font-medium">Source ID:</span>
+										<Badge variant="outline" class="text-[10px] px-1 py-0 h-5">
+											{post.sourceId}
+										</Badge>
+									</div>
+									{#if post.postedAt}
+										<div class="flex items-center gap-2">
+											<span class="font-medium">업로드일:</span>
+											<span>{post.postedAt}</span>
+										</div>
+									{/if}
+									{#if post.url}
+										<div class="flex items-start gap-2">
+											<span class="font-medium shrink-0">URL:</span>
+											<span class="truncate opacity-70">{post.url}</span>
+										</div>
+									{/if}
+								</div>
+							</div>
+						</div>
 					{/each}
-				{/if}
-			</TableBody>
-		</Table>
+				</div>
+			{/if}
+		</div>
 	</div>
 </div>
