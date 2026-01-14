@@ -100,9 +100,9 @@
 	const defaultScraperTargets: Record<SiteKey, string> = {
 		kissav: 'https://kissjav.com/most-popular/?sort_by=video_viewed_week',
 		missav: 'https://missav123.to/ko/all?sort=weekly_views',
-		twidouga: 'https://twidouga.com/trending',
-		torrentbot: 'https://torrentbot.com',
-		kone: 'https://kone.gg/s/pornvideo'
+		twidouga: 'https://www.twidouga.net/ko/ranking_t1.php',
+		torrentbot: 'https://torrentbot224.site/topic/index?top=20',
+		kone: 'https://kone.gg/s/pornvideo?mode=hot'
 	};
 
 	const defaultScraperStates: Record<SiteKey, ScraperState> = {
