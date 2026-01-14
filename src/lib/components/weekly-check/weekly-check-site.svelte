@@ -9,6 +9,10 @@
 		TableHeader,
 		TableRow
 	} from '$lib/components/ui/table';
+	import Eye from '@lucide/svelte/icons/eye';
+	import EyeOff from '@lucide/svelte/icons/eye-off';
+	import Heart from '@lucide/svelte/icons/heart';
+	import { cn } from '$lib/utils';
 
 	type SiteKey = 'kissav' | 'missav' | 'twidouga' | 'torrentbot' | 'kone';
 
@@ -113,6 +117,9 @@
 		if (val && val.trim()) return val;
 		return `https://placehold.co/160x100/0f172a/ffffff?text=${siteLabel}`;
 	}
+
+	let filter = $state<'all' | 'unread'>('unread');
+	const filteredPosts = $derived(filter === 'unread' ? posts.filter((p: Post) => !p.read) : posts);
 </script>
 
 <div class="flex flex-col gap-6">
@@ -232,131 +239,138 @@
 		</div>
 	</div>
 
-	<!-- Data Table Section -->
-	<div class="rounded-lg border bg-card shadow-sm">
+	<div class="rounded-lg border bg-card shadow-sm overflow-hidden">
 		<div class="p-4 border-b flex justify-between items-center">
 			<h3 class="font-semibold">
 				{siteLabel} 게시물 목록
 				<span class="text-muted-foreground text-sm font-normal">({posts.length}개)</span>
 			</h3>
 			<div class="flex gap-2 text-xs">
-				<span class="text-primary font-medium">읽음 {posts.filter((p: Post) => p.read).length}</span
-				>
-				<span class="text-muted-foreground">/</span>
-				<span class="text-muted-foreground">안읽음 {posts.filter((p: Post) => !p.read).length}</span
-				>
+				<div class="flex items-center rounded-lg border bg-background p-1">
+					<button
+						class={cn(
+							'px-2 py-0.5 text-xs font-medium rounded-md transition-colors',
+							filter === 'all'
+								? 'bg-primary text-primary-foreground'
+								: 'text-muted-foreground hover:text-foreground'
+						)}
+						onclick={() => (filter = 'all')}
+					>
+						전체 ({posts.length})
+					</button>
+					<button
+						class={cn(
+							'px-2 py-0.5 text-xs font-medium rounded-md transition-colors',
+							filter === 'unread'
+								? 'bg-primary text-primary-foreground'
+								: 'text-muted-foreground hover:text-foreground'
+						)}
+						onclick={() => (filter = 'unread')}
+					>
+						안읽음 ({posts.filter((p: Post) => !p.read).length})
+					</button>
+				</div>
 			</div>
 		</div>
-		<div class="relative w-full overflow-auto">
-			<Table>
-				<TableHeader>
+		<Table class="table-fixed min-w-[800px]">
+			<TableHeader>
+				<TableRow>
+					<TableHead class="w-[60px] whitespace-nowrap">ID</TableHead>
+					{#if showThumbnails}
+						<TableHead class="w-[110px] whitespace-nowrap">썸네일</TableHead>
+					{/if}
+					<TableHead class="min-w-[200px]">제목 / 원본 정보</TableHead>
+					<TableHead class="w-[120px] whitespace-nowrap text-center">업로드일</TableHead>
+					<TableHead class="w-[100px] whitespace-nowrap text-center">상태</TableHead>
+				</TableRow>
+			</TableHeader>
+			<TableBody>
+				{#if filteredPosts.length === 0}
 					<TableRow>
-						<TableHead class="w-[60px]">ID</TableHead>
-						{#if showThumbnails}
-							<TableHead class="w-[100px]">썸네일</TableHead>
-						{/if}
-						<TableHead>제목 / 원본 정보</TableHead>
-						<TableHead class="w-[120px] text-center">업로드일</TableHead>
-						<TableHead class="w-[100px] text-center">상태</TableHead>
-						<TableHead class="w-[80px] text-right">링크</TableHead>
+						<TableCell
+							colspan={showThumbnails ? 5 : 4}
+							class="h-24 text-center text-muted-foreground"
+						>
+							{filter === 'unread' ? '안읽은 게시물이 없습니다.' : '수집된 데이터가 없습니다.'}
+						</TableCell>
 					</TableRow>
-				</TableHeader>
-				<TableBody>
-					{#if posts.length === 0}
-						<TableRow>
+				{:else}
+					{#each filteredPosts as post (post.id)}
+						<TableRow
+							class="transition-colors hover:bg-muted/50 {post.read
+								? 'bg-muted/40 opacity-60'
+								: ''}"
+						>
 							<TableCell
-								colspan={showThumbnails ? 6 : 5}
-								class="h-24 text-center text-muted-foreground"
+								class="font-mono text-xs text-muted-foreground whitespace-nowrap overflow-hidden text-ellipsis"
 							>
-								수집된 데이터가 없습니다.
+								{post.id}
 							</TableCell>
-						</TableRow>
-					{:else}
-						{#each posts as post (post.id)}
-							<TableRow
-								class="transition-colors hover:bg-muted/50 {post.read
-									? 'bg-muted/40 opacity-60'
-									: ''}"
-							>
-								<TableCell class="font-mono text-xs text-muted-foreground">
-									{post.id}
-								</TableCell>
-								{#if showThumbnails}
-									<TableCell>
-										<div class="relative aspect-video w-24 overflow-hidden rounded bg-muted">
-											<img
-												src={getThumbnail(post.thumbnail)}
-												alt=""
-												class="h-full w-full object-cover transition-transform hover:scale-105"
-												loading="lazy"
-											/>
-										</div>
-									</TableCell>
-								{/if}
+							{#if showThumbnails}
 								<TableCell>
-									<div class="flex flex-col gap-1">
-										<button
-											class="text-left font-medium leading-snug hover:underline hover:text-primary transition-colors"
-											onclick={() => onToggleRead(post.id)}
-										>
-											{post.title}
-										</button>
-										<div class="flex items-center gap-2 text-xs text-muted-foreground">
-											<Badge variant="outline" class="text-[10px] px-1 py-0 h-5">
-												{post.sourceId}
-											</Badge>
-											{#if post.url}
-												<span class="truncate max-w-[200px] opacity-70">{post.url}</span>
-											{/if}
-										</div>
+									<div class="relative aspect-video w-24 overflow-hidden rounded bg-muted">
+										<img
+											src={getThumbnail(post.thumbnail)}
+											alt=""
+											class="h-full w-full object-cover transition-transform hover:scale-105"
+											loading="lazy"
+										/>
 									</div>
 								</TableCell>
-								<TableCell class="text-center text-xs text-muted-foreground whitespace-nowrap">
-									{post.postedAt || '-'}
-								</TableCell>
-								<TableCell class="text-center">
-									<div class="flex items-center justify-center gap-1">
-										<Button
-											variant={post.read ? 'secondary' : 'ghost'}
-											size="icon"
-											class="h-8 w-8 {post.read ? 'text-muted-foreground' : 'text-foreground'}"
-											onclick={() => onToggleRead(post.id)}
-											title="읽음 상태 토글"
-										>
-											<span class="material-icons-round text-lg">
-												{post.read ? 'visibility_off' : 'visibility'}
-											</span>
-										</Button>
-										<Button
-											variant="ghost"
-											size="icon"
-											class="h-8 w-8 {post.liked
-												? 'text-red-500 hover:text-red-600'
-												: 'text-muted-foreground'}"
-											onclick={() => onToggleLike(post.id)}
-											title="좋아요 토글"
-										>
-											<span class="material-icons-round text-lg">
-												{post.liked ? 'favorite' : 'favorite_border'}
-											</span>
-										</Button>
-									</div>
-								</TableCell>
-								<TableCell class="text-right">
-									<Button
-										variant="outline"
-										size="sm"
-										class="h-8 text-xs"
+							{/if}
+							<TableCell>
+								<div class="flex flex-col gap-1 pr-4">
+									<button
+										class="text-left font-medium leading-snug hover:underline hover:text-primary transition-colors line-clamp-2"
 										onclick={() => onOpenLink(post.url)}
 									>
-										Open
+										{post.title}
+									</button>
+									<div class="flex items-center gap-2 text-xs text-muted-foreground flex-wrap">
+										<Badge variant="outline" class="text-[10px] px-1 py-0 h-5 whitespace-nowrap">
+											{post.sourceId}
+										</Badge>
+										{#if post.url}
+											<span class="truncate max-w-[300px] opacity-70">{post.url}</span>
+										{/if}
+									</div>
+								</div>
+							</TableCell>
+							<TableCell class="text-center text-xs text-muted-foreground whitespace-nowrap">
+								{post.postedAt || '-'}
+							</TableCell>
+							<TableCell class="text-center whitespace-nowrap">
+								<div class="flex items-center justify-center gap-1">
+									<Button
+										variant={post.read ? 'secondary' : 'ghost'}
+										size="icon"
+										class="h-8 w-8 {post.read ? 'text-muted-foreground' : 'text-foreground'}"
+										onclick={() => onToggleRead(post.id)}
+										title="읽음 상태 토글"
+									>
+										{#if post.read}
+											<EyeOff class="h-4 w-4" />
+										{:else}
+											<Eye class="h-4 w-4" />
+										{/if}
 									</Button>
-								</TableCell>
-							</TableRow>
-						{/each}
-					{/if}
-				</TableBody>
-			</Table>
-		</div>
+									<Button
+										variant="ghost"
+										size="icon"
+										class="h-8 w-8 {post.liked
+											? 'text-red-500 hover:text-red-600'
+											: 'text-muted-foreground'}"
+										onclick={() => onToggleLike(post.id)}
+										title="좋아요 토글"
+									>
+										<Heart class="h-4 w-4 {post.liked ? 'fill-current' : ''}" />
+									</Button>
+								</div>
+							</TableCell>
+						</TableRow>
+					{/each}
+				{/if}
+			</TableBody>
+		</Table>
 	</div>
 </div>
