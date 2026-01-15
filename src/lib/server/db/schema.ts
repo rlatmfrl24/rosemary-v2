@@ -31,6 +31,7 @@ export const weekly_check_posts = sqliteTable(
 		sourceId: text('sourceId').notNull(),
 		title: text('title').notNull(),
 		url: text('url'),
+		twitterUrl: text('twitterUrl'),
 		thumbnail: text('thumbnail'),
 		postedAt: text('postedAt'),
 		likes: integer('likes').notNull().default(0),

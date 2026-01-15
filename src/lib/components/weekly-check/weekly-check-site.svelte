@@ -22,6 +22,7 @@
 		sourceId: string;
 		title: string;
 		url: string | null;
+		twitterUrl: string | null;
 		thumbnail: string | null;
 		postedAt: string | null;
 		liked: boolean;
@@ -333,8 +334,16 @@
 											<Badge variant="outline" class="text-[10px] px-1 py-0 h-5 whitespace-nowrap">
 												{post.sourceId}
 											</Badge>
-											{#if post.url}
-												<span class="truncate max-w-[300px] opacity-70">{post.url}</span>
+											{#if post.twitterUrl && site === 'twidouga'}
+												<a
+													href={post.twitterUrl}
+													target="_blank"
+													rel="noreferrer"
+													class="text-blue-500 hover:underline"
+													onclick={(e) => e.stopPropagation()}
+												>
+													트위터 링크
+												</a>
 											{/if}
 										</div>
 									</div>
@@ -460,10 +469,18 @@
 											<span>{post.postedAt}</span>
 										</div>
 									{/if}
-									{#if post.url}
-										<div class="flex items-start gap-2">
-											<span class="font-medium shrink-0">URL:</span>
-											<span class="truncate opacity-70">{post.url}</span>
+									{#if post.twitterUrl && site === 'twidouga'}
+										<div class="flex items-center gap-2">
+											<span class="font-medium">트위터 링크:</span>
+											<a
+												href={post.twitterUrl}
+												target="_blank"
+												rel="noreferrer"
+												class="text-blue-500 hover:underline truncate"
+												onclick={(e) => e.stopPropagation()}
+											>
+												{post.twitterUrl}
+											</a>
 										</div>
 									{/if}
 								</div>

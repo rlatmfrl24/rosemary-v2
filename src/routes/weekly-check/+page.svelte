@@ -6,6 +6,7 @@
 			sourceId: string;
 			title: string;
 			url: string | null;
+			twitterUrl: string | null;
 			thumbnail: string | null;
 			postedAt: string | null;
 			liked: number | boolean;
@@ -66,6 +67,7 @@
 		sourceId: string;
 		title: string;
 		url: string | null;
+		twitterUrl: string | null;
 		thumbnail: string | null;
 		postedAt: string | null;
 		liked: boolean;
@@ -207,6 +209,7 @@
 				sourceId: post.sourceId,
 				title: post.title,
 				url: post.url ?? null,
+				twitterUrl: post.twitterUrl ?? null,
 				thumbnail: post.thumbnail ?? null,
 				postedAt: post.postedAt ?? null,
 				liked: Boolean(post.liked),
