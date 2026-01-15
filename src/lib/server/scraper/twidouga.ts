@@ -45,7 +45,7 @@ export function parseTwidouga(html: string): Post[] {
 		const gazou = $el.nextAll('.gazou').first();
 		const poster = gazou.find('.poster');
 
-		const videoUrl = poster.find('a').first().attr('href') ?? tweetUrl;
+		const videoUrl = poster.find('a').first().attr('href') ?? null;
 		const thumbnail = poster.find('img').first().attr('src') ?? null;
 
 		const saveTextRaw = (el.next as { data?: string } | null | undefined)?.data ?? '';
@@ -59,6 +59,7 @@ export function parseTwidouga(html: string): Post[] {
 			sourceId,
 			title,
 			url: videoUrl,
+			twitterUrl: tweetUrl,
 			thumbnail,
 			postedAt: null
 		});
@@ -66,4 +67,3 @@ export function parseTwidouga(html: string): Post[] {
 
 	return posts;
 }
-

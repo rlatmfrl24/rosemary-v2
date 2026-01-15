@@ -6,6 +6,7 @@ export type Post = {
 	sourceId: string;
 	title: string;
 	url?: string | null;
+	twitterUrl?: string | null;
 	thumbnail?: string | null;
 	postedAt?: string | null;
 };
@@ -100,6 +101,7 @@ export class WeeklyCheckService {
 								sourceId: p.sourceId,
 								title: p.title,
 								url: p.url ?? undefined,
+								twitterUrl: p.twitterUrl ?? undefined,
 								thumbnail: p.thumbnail,
 								postedAt: p.postedAt ?? undefined
 							}))
@@ -109,6 +111,7 @@ export class WeeklyCheckService {
 							set: {
 								title: sql`excluded.title`,
 								url: sql`COALESCE(excluded.url, "weekly-check-posts".url)`,
+								twitterUrl: sql`COALESCE(excluded.twitterUrl, "weekly-check-posts".twitterUrl)`,
 								thumbnail: sql`excluded.thumbnail`,
 								postedAt: sql`COALESCE(excluded.postedAt, "weekly-check-posts".postedAt)`
 							}
@@ -127,6 +130,7 @@ export class WeeklyCheckService {
 				.set({
 					title: post.title,
 					url: post.url ?? weekly_check_posts.url,
+					twitterUrl: post.twitterUrl ?? weekly_check_posts.twitterUrl,
 					thumbnail: post.thumbnail,
 					postedAt: post.postedAt ?? weekly_check_posts.postedAt
 				})
