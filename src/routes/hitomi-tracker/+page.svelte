@@ -4,6 +4,7 @@
 	// Hitomi tracker 모듈에서 필요한 것들 import
 	import {
 		formatLastCrawlTime,
+		getCrawlStatusLabel,
 		useCurrentTime,
 		useLoadingState,
 		createEnhanceHandler,
@@ -22,8 +23,9 @@
 
 	// 반응형 상태: currentTime이 변경될 때마다 자동으로 재계산
 	const formattedLastCrawlTime = $derived(
-		formatLastCrawlTime(data.lastCrawlTime, currentTime.current)
+		formatLastCrawlTime(data.lastCrawl.completedAt, currentTime.current, data.lastCrawl.status)
 	);
+	const crawlStatusLabel = $derived(getCrawlStatusLabel(data.lastCrawl.status));
 
 	// Enhance 핸들러들
 	const normalEnhanceHandler = createEnhanceHandler(loadingState.setLoading);
@@ -44,11 +46,18 @@
 			<p class="text-sm text-muted-foreground">
 				마지막 크롤링: {formattedLastCrawlTime}
 			</p>
+			<p class="text-sm text-muted-foreground">
+				상태: {crawlStatusLabel}
+				{#if data.lastCrawl.status === 'failed' && data.lastCrawl.error}
+					- {data.lastCrawl.error}
+				{/if}
+			</p>
 		</div>
 
 		<div class="flex justify-between items-center flex-1">
 			<ActionButtons
 				items={data.new_item_list}
+				totalItems={data.pagination.totalItems}
 				isLoading={loadingState.isLoading}
 				crawlError={loadingState.crawlError}
 				{onCopyCodesClick}
@@ -66,4 +75,22 @@
 	</div>
 
 	<HitomiTable items={data.new_item_list} isLoading={loadingState.isLoading} />
+
+	<div class="flex items-center justify-between text-sm text-muted-foreground">
+		<p>
+			총 {data.pagination.totalItems}개 · 페이지 {data.pagination.page}/{data.pagination.totalPages}
+		</p>
+		<div class="flex items-center gap-3">
+			{#if data.pagination.page > 1}
+				<a href="?page={data.pagination.page - 1}" class="underline hover:no-underline">이전</a>
+			{:else}
+				<span class="opacity-50">이전</span>
+			{/if}
+			{#if data.pagination.page < data.pagination.totalPages}
+				<a href="?page={data.pagination.page + 1}" class="underline hover:no-underline">다음</a>
+			{:else}
+				<span class="opacity-50">다음</span>
+			{/if}
+		</div>
+	</div>
 </div>

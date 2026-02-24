@@ -7,6 +7,7 @@
 
 	interface Props {
 		items: HitomiItem[];
+		totalItems: number;
 		isLoading: boolean;
 		crawlError: string | null;
 		onCopyCodesClick: () => void;
@@ -29,6 +30,7 @@
 
 	const {
 		items,
+		totalItems,
 		isLoading,
 		crawlError,
 		onCopyCodesClick,
@@ -39,7 +41,7 @@
 </script>
 
 <div class="flex flex-row gap-2 items-center">
-	<Button onclick={onCopyCodesClick} disabled={items.length === 0}>Copy codes to clipboard</Button>
+	<Button onclick={onCopyCodesClick} disabled={totalItems === 0}>Copy codes to clipboard</Button>
 
 	<form method="post" action="?/clearNewItems" use:enhance={normalEnhanceHandler}>
 		<Button

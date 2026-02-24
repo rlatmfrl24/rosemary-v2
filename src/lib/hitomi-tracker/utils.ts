@@ -1,3 +1,5 @@
+import type { CrawlStatus } from './types';
+
 /**
  * Unix timestamp를 Date 객체로 변환하는 유틸리티 함수
  * @param timestamp - Unix 타임스탬프 (초 단위) 또는 문자열 또는 날짜 문자열
@@ -67,8 +69,11 @@ export function parseTimestamp(timestamp: number | string | null): Date | null {
  */
 export function formatLastCrawlTime(
 	timestamp: number | string | null,
-	referenceTime: Date
+	referenceTime: Date,
+	status?: CrawlStatus
 ): string {
+	if (status === 'running') return '크롤링 진행 중';
+
 	// timestamp가 없거나 null인 경우
 	if (!timestamp && timestamp !== 0) return '크롤링 기록이 없습니다';
 
@@ -121,6 +126,19 @@ export function formatLastCrawlTime(
 		hour: '2-digit',
 		minute: '2-digit'
 	});
+}
+
+export function getCrawlStatusLabel(status: CrawlStatus): string {
+	switch (status) {
+		case 'running':
+			return '진행 중';
+		case 'success':
+			return '성공';
+		case 'failed':
+			return '실패';
+		default:
+			return '대기';
+	}
 }
 
 /**
