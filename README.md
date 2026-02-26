@@ -1,38 +1,85 @@
-# sv
+# Rosemary v2
 
-Everything you need to build a Svelte project, powered by [`sv`](https://github.com/sveltejs/cli).
+SvelteKit + Cloudflare Workers/D1 기반 개인용 유틸리티 앱입니다.
 
-## Creating a project
+## Features
 
-If you're seeing this, you've probably already done this step. Congrats!
+- `Daily Check`: 출석/임무/일일퀘스트 체크리스트, 항목 CRUD, 자동 리셋, 인앱 알림, 웹푸시
+- `Hitomi Tracker`: 기존 크롤링/히스토리 기능
 
-```bash
-# create a new project in the current directory
-npx sv create
-
-# create a new project in my-app
-npx sv create my-app
-```
-
-## Developing
-
-Once you've created a project and installed dependencies with `npm install` (or `pnpm install` or `yarn`), start a development server:
+## Local Development
 
 ```bash
-npm run dev
-
-# or start the server and open the app in a new browser tab
-npm run dev -- --open
+pnpm install
+pnpm run dev
 ```
 
-## Building
-
-To create a production version of your app:
+검증 명령:
 
 ```bash
-npm run build
+pnpm run check
+pnpm run test
 ```
 
-You can preview the production build with `npm run preview`.
+## Daily Check 설정
 
-> To deploy your app, you may need to install an [adapter](https://svelte.dev/docs/kit/adapters) for your target environment.
+### 1) D1 마이그레이션
+
+`migrations/0013_daily_check_tables.sql` 이 포함되어 있습니다.
+
+### 2) VAPID 키 생성
+
+```bash
+npx web-push generate-vapid-keys
+```
+
+생성된 값을 아래 환경 변수에 설정합니다.
+
+### 3) 앱 워커 환경 변수/시크릿
+
+`wrangler.jsonc`:
+
+- `VAPID_PUBLIC_KEY` (vars)
+- `WEB_PUSH_SUBJECT` (vars, 예: `mailto:you@example.com`)
+- `APP_BASE_URL` (vars, 예: `https://your-app.example.com`)
+
+시크릿:
+
+```bash
+wrangler secret put DAILY_CHECK_CRON_TOKEN
+wrangler secret put VAPID_PRIVATE_KEY
+```
+
+추가 권장 변수:
+
+- `DAILY_CHECK_ALLOWED_EMAILS` (vars, 쉼표 구분 이메일 목록)
+  - Cloudflare Access 인증 이메일이 목록에 포함된 요청만 `/api/daily-check/push-subscriptions` 저장/삭제 허용
+  - 비워두면 Access 인증 사용자 전체 허용
+
+### 4) 크론 워커 배포
+
+`workers/daily-check-cron/wrangler.toml` 의 `DAILY_CHECK_DISPATCH_URL`를 앱 도메인으로 수정 후:
+
+```bash
+cd workers/daily-check-cron
+wrangler secret put DAILY_CHECK_CRON_TOKEN
+wrangler deploy
+```
+
+크론 워커는 매 1분마다 `/api/daily-check/dispatch`를 호출합니다.
+
+## Web Push 동작
+
+1. `/daily-check` 페이지에서 `웹푸시 구독` 클릭
+2. 브라우저 알림 권한 승인
+3. 구독 정보가 `/api/daily-check/push-subscriptions`에 저장
+4. 크론 워커가 `/api/daily-check/dispatch` 호출
+5. 미완료 항목이 있을 경우 푸시 전송
+
+## 주요 경로
+
+- `/daily-check`
+- `/hitomi-tracker`
+- `/api/daily-check/push-subscriptions`
+- `/api/daily-check/reminders`
+- `/api/daily-check/dispatch`

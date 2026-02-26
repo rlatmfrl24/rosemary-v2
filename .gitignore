@@ -26,3 +26,6 @@ vite.config.ts.timestamp-*
 
 # YoYo AI version control directory
 .yoyo/
+
+# Local database backups / snapshots (may include sensitive user data)
+.db-backup/

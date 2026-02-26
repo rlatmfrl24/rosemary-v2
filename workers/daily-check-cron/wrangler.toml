@@ -1,0 +1,10 @@
+name = "daily-check-cron"
+main = "src/index.ts"
+compatibility_date = "2025-06-10"
+workers_dev = true
+
+[triggers]
+crons = ["* * * * *"]
+
+[vars]
+DAILY_CHECK_DISPATCH_URL = "https://rosemary-v2.397love.workers.dev/api/daily-check/dispatch"
