@@ -39,6 +39,16 @@
 	 * Environment Variables
 	 * https://developers.cloudflare.com/workers/wrangler/configuration/#environment-variables
 	 */
+	"vars": {
+		"APP_BASE_URL": "https://rosemary-v2.397love.workers.dev",
+		"WEB_PUSH_SUBJECT": "mailto:397love@gmail.com",
+		"VAPID_PUBLIC_KEY": "BGJ5FcKt-wE2ghSjgroQoTQGocVnDYiGt4lZn613CzCWXvFixJHiAlNpzGRbHVRYOu-itxdxzX32Lwq45UzXI4o"
+	},
+	/**
+	 * Secrets should be configured with:
+	 * - wrangler secret put DAILY_CHECK_CRON_TOKEN
+	 * - wrangler secret put VAPID_PRIVATE_KEY
+	 */
 
 	"secrets_store_secrets": [
 		{

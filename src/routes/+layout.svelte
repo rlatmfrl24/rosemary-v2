@@ -16,6 +16,7 @@
 	<header class="w-full p-4 bg-slate-900 text-white flex items-center">
 		<h1 class="text-4xl font-bold mr-6">Rosemary</h1>
 		<nav class="flex items-center gap-4">
+			<a href="/daily-check">Daily Check</a>
 			<a href="/hitomi-tracker">Hitomi Tracker</a>
 		</nav>
 	</header>
