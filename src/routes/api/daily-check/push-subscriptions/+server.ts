@@ -62,12 +62,11 @@ function isLocalDevelopmentRequest(request: Request): boolean {
 	const host = parsed.hostname.toLowerCase();
 	const normalizedHost =
 		host.startsWith('[') && host.endsWith(']') ? host.slice(1, host.length - 1) : host;
-	return (
-		normalizedHost === 'localhost' ||
-		normalizedHost === '127.0.0.1' ||
-		normalizedHost === '::1' ||
-		normalizedHost === '0:0:0:0:0:0:0:1'
-	);
+	if (normalizedHost === 'localhost' || normalizedHost.endsWith('.localhost')) return true;
+	if (normalizedHost === '::1' || normalizedHost === '0:0:0:0:0:0:0:1') return true;
+	if (/^127(?:\.\d{1,3}){3}$/.test(normalizedHost)) return true;
+	if (/^::ffff:127(?:\.\d{1,3}){3}$/.test(normalizedHost)) return true;
+	return false;
 }
 
 function isTrustedPushSubscriptionCaller(
