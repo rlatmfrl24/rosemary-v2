@@ -13,6 +13,7 @@ declare global {
 				SECRET_CLOUDFLARE_ACCOUNT_ID: SecretStore;
 				DEBUG_HITOMI_CRAWL?: string;
 				DAILY_CHECK_CRON_TOKEN?: string;
+				DAILY_CHECK_ALLOWED_EMAILS?: string;
 				VAPID_PUBLIC_KEY?: string;
 				VAPID_PRIVATE_KEY?: string;
 				WEB_PUSH_SUBJECT?: string;

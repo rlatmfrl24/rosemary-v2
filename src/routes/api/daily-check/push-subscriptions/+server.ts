@@ -3,6 +3,7 @@ import {
 	upsertPushSubscription
 } from '$lib/server/daily-check/database';
 import { ensureDailyCheckInfrastructure } from '$lib/server/daily-check/infrastructure';
+import { dev } from '$app/environment';
 import { json, type RequestHandler } from '@sveltejs/kit';
 
 interface PushSubscriptionPayload {
@@ -21,15 +22,106 @@ function getDb(platform: App.Platform | undefined): D1Database | null {
 	return platform?.env?.DB ?? null;
 }
 
+function unauthorizedResponse(message: string) {
+	return json(
+		{
+			success: false,
+			error: message
+		},
+		{
+			status: 401,
+			headers: { 'Cache-Control': 'no-store' }
+		}
+	);
+}
+
+function extractBearerToken(authorizationHeader: string | null): string | null {
+	if (!authorizationHeader?.startsWith('Bearer ')) return null;
+	const token = authorizationHeader.slice('Bearer '.length).trim();
+	return token || null;
+}
+
+function parseAllowedEmails(raw: string | undefined): Set<string> {
+	if (!raw) return new Set();
+	return new Set(
+		raw
+			.split(',')
+			.map((value) => value.trim().toLowerCase())
+			.filter(Boolean)
+	);
+}
+
+function isTrustedPushSubscriptionCaller(
+	request: Request,
+	platform: App.Platform | undefined
+): boolean {
+	if (dev) return true;
+
+	const cronToken = platform?.env?.DAILY_CHECK_CRON_TOKEN;
+	const bearerToken = extractBearerToken(request.headers.get('Authorization'));
+	if (cronToken && bearerToken === cronToken) {
+		return true;
+	}
+
+	const cfAccessEmail = request.headers.get('CF-Access-Authenticated-User-Email')?.trim().toLowerCase();
+	if (!cfAccessEmail) {
+		return false;
+	}
+
+	const allowedEmails = parseAllowedEmails(platform?.env?.DAILY_CHECK_ALLOWED_EMAILS);
+	if (allowedEmails.size === 0) {
+		return true;
+	}
+
+	return allowedEmails.has(cfAccessEmail);
+}
+
+const PUSH_ENDPOINT_PATTERNS: RegExp[] = [
+	/^https:\/\/fcm\.googleapis\.com\/fcm\/send\/[A-Za-z0-9_\-:.%]+$/,
+	/^https:\/\/updates\.push\.services\.mozilla\.com\/wpush\/v[0-9]+\/[A-Za-z0-9_\-:.%]+$/,
+	/^https:\/\/(?:[a-z0-9-]+\.)?notify\.windows\.com\/\S+$/i,
+	/^https:\/\/web\.push\.apple\.com\/\S+$/i,
+	/^https:\/\/(?:[a-z0-9-]+\.)?push\.apple\.com\/\S+$/i
+];
+
+const BASE64_URL_PATTERN = /^[A-Za-z0-9\-_]+$/;
+
+function isValidPushEndpoint(endpoint: string): boolean {
+	if (endpoint.length < 16 || endpoint.length > 2048) return false;
+
+	let parsed: URL;
+	try {
+		parsed = new URL(endpoint);
+	} catch {
+		return false;
+	}
+
+	if (parsed.protocol !== 'https:') return false;
+	if (parsed.username || parsed.password) return false;
+
+	return PUSH_ENDPOINT_PATTERNS.some((pattern) => pattern.test(endpoint));
+}
+
+function isValidBase64UrlToken(token: string, minLength: number, maxLength: number): boolean {
+	return token.length >= minLength && token.length <= maxLength && BASE64_URL_PATTERN.test(token);
+}
+
 function parseSubscriptionInput(payload: PushSubscriptionPayload) {
 	const subscription = payload.subscription;
 	const endpoint = typeof subscription?.endpoint === 'string' ? subscription.endpoint.trim() : '';
 	const p256dh =
 		typeof subscription?.keys?.p256dh === 'string' ? subscription.keys.p256dh.trim() : '';
 	const auth = typeof subscription?.keys?.auth === 'string' ? subscription.keys.auth.trim() : '';
-	const userAgent = typeof payload.userAgent === 'string' ? payload.userAgent.trim() : null;
+	const userAgentRaw = typeof payload.userAgent === 'string' ? payload.userAgent.trim() : '';
+	const userAgent = userAgentRaw ? userAgentRaw.slice(0, 500) : null;
 
 	if (!endpoint || !p256dh || !auth) {
+		return null;
+	}
+	if (!isValidPushEndpoint(endpoint)) {
+		return null;
+	}
+	if (!isValidBase64UrlToken(p256dh, 40, 512) || !isValidBase64UrlToken(auth, 12, 128)) {
 		return null;
 	}
 
@@ -42,6 +134,10 @@ function parseSubscriptionInput(payload: PushSubscriptionPayload) {
 }
 
 export const POST: RequestHandler = async ({ platform, request }) => {
+	if (!isTrustedPushSubscriptionCaller(request, platform)) {
+		return unauthorizedResponse('Trusted caller authentication is required.');
+	}
+
 	const db = getDb(platform);
 	if (!db) {
 		return json(
@@ -110,6 +206,10 @@ export const POST: RequestHandler = async ({ platform, request }) => {
 };
 
 export const DELETE: RequestHandler = async ({ platform, request }) => {
+	if (!isTrustedPushSubscriptionCaller(request, platform)) {
+		return unauthorizedResponse('Trusted caller authentication is required.');
+	}
+
 	const db = getDb(platform);
 	if (!db) {
 		return json(
@@ -126,11 +226,11 @@ export const DELETE: RequestHandler = async ({ platform, request }) => {
 
 	const payload = (await request.json().catch(() => null)) as PushSubscriptionPayload | null;
 	const endpoint = typeof payload?.endpoint === 'string' ? payload.endpoint.trim() : '';
-	if (!endpoint) {
+	if (!endpoint || !isValidPushEndpoint(endpoint)) {
 		return json(
 			{
 				success: false,
-				error: '삭제할 구독 endpoint가 필요합니다.'
+				error: '삭제할 유효한 구독 endpoint가 필요합니다.'
 			},
 			{
 				status: 400,

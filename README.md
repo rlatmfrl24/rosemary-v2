@@ -50,6 +50,12 @@ wrangler secret put DAILY_CHECK_CRON_TOKEN
 wrangler secret put VAPID_PRIVATE_KEY
 ```
 
+추가 권장 변수:
+
+- `DAILY_CHECK_ALLOWED_EMAILS` (vars, 쉼표 구분 이메일 목록)
+  - Cloudflare Access 인증 이메일이 목록에 포함된 요청만 `/api/daily-check/push-subscriptions` 저장/삭제 허용
+  - 비워두면 Access 인증 사용자 전체 허용
+
 ### 4) 크론 워커 배포
 
 `workers/daily-check-cron/wrangler.toml` 의 `DAILY_CHECK_DISPATCH_URL`를 앱 도메인으로 수정 후:
