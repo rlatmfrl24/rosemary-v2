@@ -51,11 +51,30 @@ function parseAllowedEmails(raw: string | undefined): Set<string> {
 	);
 }
 
+function isLocalDevelopmentRequest(request: Request): boolean {
+	let parsed: URL;
+	try {
+		parsed = new URL(request.url);
+	} catch {
+		return false;
+	}
+
+	const host = parsed.hostname.toLowerCase();
+	const normalizedHost =
+		host.startsWith('[') && host.endsWith(']') ? host.slice(1, host.length - 1) : host;
+	return (
+		normalizedHost === 'localhost' ||
+		normalizedHost === '127.0.0.1' ||
+		normalizedHost === '::1' ||
+		normalizedHost === '0:0:0:0:0:0:0:1'
+	);
+}
+
 function isTrustedPushSubscriptionCaller(
 	request: Request,
 	platform: App.Platform | undefined
 ): boolean {
-	if (dev) return true;
+	if (dev || isLocalDevelopmentRequest(request)) return true;
 
 	const cronToken = platform?.env?.DAILY_CHECK_CRON_TOKEN;
 	const bearerToken = extractBearerToken(request.headers.get('Authorization'));
@@ -135,7 +154,9 @@ function parseSubscriptionInput(payload: PushSubscriptionPayload) {
 
 export const POST: RequestHandler = async ({ platform, request }) => {
 	if (!isTrustedPushSubscriptionCaller(request, platform)) {
-		return unauthorizedResponse('Trusted caller authentication is required.');
+		return unauthorizedResponse(
+			'Trusted caller authentication is required. (Cloudflare Access or Bearer token)'
+		);
 	}
 
 	const db = getDb(platform);
@@ -207,7 +228,9 @@ export const POST: RequestHandler = async ({ platform, request }) => {
 
 export const DELETE: RequestHandler = async ({ platform, request }) => {
 	if (!isTrustedPushSubscriptionCaller(request, platform)) {
-		return unauthorizedResponse('Trusted caller authentication is required.');
+		return unauthorizedResponse(
+			'Trusted caller authentication is required. (Cloudflare Access or Bearer token)'
+		);
 	}
 
 	const db = getDb(platform);
