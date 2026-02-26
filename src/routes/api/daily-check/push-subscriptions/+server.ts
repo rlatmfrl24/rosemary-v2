@@ -78,23 +78,26 @@ function isSameOriginBrowserRequest(request: Request): boolean {
 	}
 
 	const origin = request.headers.get('Origin');
-	if (!origin || origin !== parsed.origin) return false;
-
+	const referer = request.headers.get('Referer');
 	const secFetchSite = request.headers.get('Sec-Fetch-Site')?.toLowerCase();
 	if (secFetchSite && secFetchSite !== 'same-origin' && secFetchSite !== 'same-site') {
 		return false;
 	}
 
-	const referer = request.headers.get('Referer');
-	if (referer) {
+	let sameOriginMatched = false;
+	if (origin) {
+		sameOriginMatched = origin === parsed.origin;
+	}
+
+	if (!sameOriginMatched && referer) {
 		try {
-			if (new URL(referer).origin !== parsed.origin) return false;
+			sameOriginMatched = new URL(referer).origin === parsed.origin;
 		} catch {
 			return false;
 		}
 	}
 
-	return true;
+	return sameOriginMatched;
 }
 
 function isTrustedPushSubscriptionCaller(
