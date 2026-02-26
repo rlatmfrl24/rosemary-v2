@@ -60,7 +60,14 @@ function isLocalDevelopmentRequest(request: Request): boolean {
 	}
 
 	const host = parsed.hostname.toLowerCase();
-	return host === 'localhost' || host === '127.0.0.1' || host === '::1';
+	const normalizedHost =
+		host.startsWith('[') && host.endsWith(']') ? host.slice(1, host.length - 1) : host;
+	return (
+		normalizedHost === 'localhost' ||
+		normalizedHost === '127.0.0.1' ||
+		normalizedHost === '::1' ||
+		normalizedHost === '0:0:0:0:0:0:0:1'
+	);
 }
 
 function isTrustedPushSubscriptionCaller(
