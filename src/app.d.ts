@@ -11,6 +11,7 @@ declare global {
 				BROWSER: Fetcher;
 				SECRET_BROWSER_RENDERING_TOKEN: SecretStore;
 				SECRET_CLOUDFLARE_ACCOUNT_ID: SecretStore;
+				DEBUG_HITOMI_CRAWL?: string;
 			};
 			cf: CfProperties;
 			ctx: ExecutionContext;

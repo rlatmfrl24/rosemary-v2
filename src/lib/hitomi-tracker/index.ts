@@ -1,8 +1,21 @@
 // Types
-export type { HitomiItem, HitomiTrackerData, EnhanceResult } from './types';
+export type {
+	HitomiItem,
+	HitomiTrackerData,
+	EnhanceResult,
+	CrawlStatus,
+	LastCrawlState,
+	PaginationData
+} from './types';
 
 // Utils
-export { parseTimestamp, formatLastCrawlTime, formatCreatedAt, copyToClipboard } from './utils';
+export {
+	parseTimestamp,
+	formatLastCrawlTime,
+	formatCreatedAt,
+	copyToClipboard,
+	getCrawlStatusLabel
+} from './utils';
 
 // Table configuration
 export { HITOMI_TABLE_COLUMNS } from './table-config';

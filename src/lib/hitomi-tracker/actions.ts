@@ -2,13 +2,44 @@ import { toast } from 'svelte-sonner';
 import type { HitomiItem } from './types';
 import { copyToClipboard } from './utils';
 
+interface CodesApiResponse {
+	success: boolean;
+	codes?: string[];
+	error?: string;
+}
+
 /**
  * 코드 복사 액션
  * @param items - Hitomi 아이템 목록
  */
 export async function handleCopyCodesClick(items: HitomiItem[]) {
-	const codes = items.map((item) => item.code).join('\n');
-	const success = await copyToClipboard(codes);
+	let codes = items.map((item) => item.code);
+
+	try {
+		const response = await fetch('/api/hitomi/codes?scope=all', {
+			method: 'GET',
+			headers: {
+				Accept: 'application/json'
+			}
+		});
+
+		if (response.ok) {
+			const result = (await response.json()) as CodesApiResponse;
+			if (result.success && Array.isArray(result.codes)) {
+				codes = result.codes;
+			}
+		}
+	} catch (error) {
+		console.warn('Failed to fetch full code list, fallback to current page codes', error);
+	}
+
+	const text = codes.join('\n');
+	if (!text) {
+		toast.error('No codes to copy');
+		return;
+	}
+
+	const success = await copyToClipboard(text);
 
 	if (success) {
 		toast.success('Codes copied to clipboard', {
@@ -26,7 +57,7 @@ export async function handleCopyCodesClick(items: HitomiItem[]) {
  * @param item - 클릭된 Hitomi 아이템
  */
 export function handleRowClick(item: HitomiItem) {
-	window.open(item.url, '_blank');
+	window.open(item.url, '_blank', 'noopener,noreferrer');
 }
 
 /**

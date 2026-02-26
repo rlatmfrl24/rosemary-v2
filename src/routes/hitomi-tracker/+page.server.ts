@@ -3,10 +3,12 @@ import { GET } from '../api/crawl/+server';
 import { GET as GET_BROWSER } from '../api/crawl/browser/+server';
 import {
 	getNewItems,
-	getLastCrawlTime,
+	getLastCrawlState,
+	DEFAULT_PAGE_SIZE,
 	clearNewItems,
 	clearHistory
 } from '@/lib/server/hitomi-tracker/database';
+import { ensureHitomiTrackerInfrastructure } from '@/lib/server/hitomi-tracker/infrastructure';
 
 // 크롤링 API 응답 타입 정의
 interface CrawlApiResponse {
@@ -21,12 +23,19 @@ interface CrawlApiResponse {
 
 export const load: PageServerLoad = async (context) => {
 	const db = context.platform?.env.DB as D1Database;
+	await ensureHitomiTrackerInfrastructure(db);
+	const pageParam = Number(context.url.searchParams.get('page') ?? '1');
+	const page = Number.isFinite(pageParam) && pageParam > 0 ? Math.floor(pageParam) : 1;
 
-	const [newItems, lastCrawlTime] = await Promise.all([getNewItems(db), getLastCrawlTime(db)]);
+	const [newItemsResult, lastCrawl] = await Promise.all([
+		getNewItems(db, page, DEFAULT_PAGE_SIZE),
+		getLastCrawlState(db)
+	]);
 
 	return {
-		new_item_list: newItems,
-		lastCrawlTime
+		new_item_list: newItemsResult.items,
+		pagination: newItemsResult.pagination,
+		lastCrawl
 	};
 };
 
