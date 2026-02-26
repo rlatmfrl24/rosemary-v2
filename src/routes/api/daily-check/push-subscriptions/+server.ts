@@ -69,6 +69,34 @@ function isLocalDevelopmentRequest(request: Request): boolean {
 	return false;
 }
 
+function isSameOriginBrowserRequest(request: Request): boolean {
+	let parsed: URL;
+	try {
+		parsed = new URL(request.url);
+	} catch {
+		return false;
+	}
+
+	const origin = request.headers.get('Origin');
+	if (!origin || origin !== parsed.origin) return false;
+
+	const secFetchSite = request.headers.get('Sec-Fetch-Site')?.toLowerCase();
+	if (secFetchSite && secFetchSite !== 'same-origin' && secFetchSite !== 'same-site') {
+		return false;
+	}
+
+	const referer = request.headers.get('Referer');
+	if (referer) {
+		try {
+			if (new URL(referer).origin !== parsed.origin) return false;
+		} catch {
+			return false;
+		}
+	}
+
+	return true;
+}
+
 function isTrustedPushSubscriptionCaller(
 	request: Request,
 	platform: App.Platform | undefined
@@ -78,6 +106,10 @@ function isTrustedPushSubscriptionCaller(
 	const cronToken = platform?.env?.DAILY_CHECK_CRON_TOKEN;
 	const bearerToken = extractBearerToken(request.headers.get('Authorization'));
 	if (cronToken && bearerToken === cronToken) {
+		return true;
+	}
+
+	if (isSameOriginBrowserRequest(request)) {
 		return true;
 	}
 
