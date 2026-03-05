@@ -48,7 +48,6 @@ export const load: PageServerLoad = async ({ platform }) => {
 			importanceOptions: DAILY_CHECK_IMPORTANCE_OPTIONS,
 			defaultTimeZone: DEFAULT_DAILY_CHECK_TIME_ZONE,
 			defaultImportance: DEFAULT_DAILY_CHECK_IMPORTANCE,
-			vapidPublicKey: null,
 			dbUnavailable: true
 		};
 	}
@@ -63,7 +62,6 @@ export const load: PageServerLoad = async ({ platform }) => {
 		importanceOptions: DAILY_CHECK_IMPORTANCE_OPTIONS,
 		defaultTimeZone: DEFAULT_DAILY_CHECK_TIME_ZONE,
 		defaultImportance: DEFAULT_DAILY_CHECK_IMPORTANCE,
-		vapidPublicKey: platform?.env?.VAPID_PUBLIC_KEY ?? null,
 		dbUnavailable: false
 	};
 };

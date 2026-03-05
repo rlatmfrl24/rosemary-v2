@@ -48,6 +48,12 @@ describe('daily-check form validation', () => {
 		const missionResult = parseDailyCheckFormInput(missionFormData);
 		expect(missionResult.success).toBe(true);
 
+		const dailyQuestFormData = buildValidFormData();
+		dailyQuestFormData.set('kind', 'daily_quest');
+		dailyQuestFormData.set('url', '');
+		const dailyQuestResult = parseDailyCheckFormInput(dailyQuestFormData);
+		expect(dailyQuestResult.success).toBe(true);
+
 		const siteVisitFormData = buildValidFormData();
 		siteVisitFormData.set('kind', 'site_visit');
 		siteVisitFormData.set('url', '');

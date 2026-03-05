@@ -55,24 +55,3 @@ export interface DailyReminder {
 	cycleKeys: string[];
 	items: DailyReminderItem[];
 }
-
-export interface PushSubscriptionRow {
-	id: number;
-	endpoint: string;
-	p256dh: string;
-	auth: string;
-	userAgent: string | null;
-	lastSuccessAt: number | null;
-	lastError: string | null;
-	createdAt: number;
-	updatedAt: number;
-}
-
-export interface DispatchResult {
-	success: boolean;
-	dispatched: number;
-	skipped: number;
-	invalidSubscriptions: number;
-	errors: string[];
-	cycleKeys: string[];
-}
