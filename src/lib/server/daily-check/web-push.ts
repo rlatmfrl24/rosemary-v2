@@ -46,7 +46,10 @@ function normalizeBase64Url(input: string): string {
 
 function fromBase64Url(input: string): Uint8Array {
 	const normalized = normalizeBase64Url(input);
-	const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, '=').replace(/-/g, '+').replace(/_/g, '/');
+	const padded = normalized
+		.padEnd(Math.ceil(normalized.length / 4) * 4, '=')
+		.replace(/-/g, '+')
+		.replace(/_/g, '/');
 	return fromBase64(padded);
 }
 

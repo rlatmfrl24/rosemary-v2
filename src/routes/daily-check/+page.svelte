@@ -43,9 +43,13 @@
 	let createKind = $state<string>('site_visit');
 	let createImportance = $state<string>(data.defaultImportance);
 	let createResetTimes = $state<string[]>([DEFAULT_RESET_TIME]);
+	let createPushReminderEnabled = $state(true);
+	let createPushReminderOffsetMinutes = $state<string>('');
 	let editingKind = $state<string>('site_visit');
 	let editingImportance = $state<string>(data.defaultImportance);
 	let editingResetTimes = $state<string[]>([DEFAULT_RESET_TIME]);
+	let editingPushReminderEnabled = $state(true);
+	let editingPushReminderOffsetMinutes = $state<string>('');
 	let celebrationItemIds = $state<number[]>([]);
 	const previousCompletionMap = new Map<number, boolean>();
 
@@ -53,6 +57,11 @@
 	const completedCount = $derived(itemViews.filter((item) => item.isCompleted).length);
 	const remainingCount = $derived(itemViews.filter((item) => !item.isCompleted).length);
 	const remainingMinutes = $derived(summarizeRemainingMinutes(itemViews));
+
+	function getEstimatedMinutesSortValue(item: DailyCheckItemView): number {
+		return item.estimatedMinutes === null ? Number.MAX_SAFE_INTEGER : item.estimatedMinutes;
+	}
+
 	const sortedItemViews = $derived(
 		[...itemViews].sort((left, right) => {
 			if (left.isCompleted !== right.isCompleted) {
@@ -60,6 +69,10 @@
 			}
 
 			if (!left.isCompleted) {
+				const estimatedMinutesDiff =
+					getEstimatedMinutesSortValue(left) - getEstimatedMinutesSortValue(right);
+				if (estimatedMinutesDiff !== 0) return estimatedMinutesDiff;
+
 				const overdueDiff = right.minutesPastReset - left.minutesPastReset;
 				if (overdueDiff !== 0) return overdueDiff;
 				return left.nextResetAt - right.nextResetAt;
@@ -100,6 +113,8 @@
 		createKind = 'site_visit';
 		createImportance = data.defaultImportance;
 		createResetTimes = [DEFAULT_RESET_TIME];
+		createPushReminderEnabled = true;
+		createPushReminderOffsetMinutes = '';
 	}
 
 	function resetEditState() {
@@ -107,6 +122,8 @@
 		editingKind = 'site_visit';
 		editingImportance = data.defaultImportance;
 		editingResetTimes = [DEFAULT_RESET_TIME];
+		editingPushReminderEnabled = true;
+		editingPushReminderOffsetMinutes = '';
 	}
 
 	function addCreateResetTime() {
@@ -149,6 +166,9 @@
 		editingKind = item.kind;
 		editingImportance = item.importance;
 		editingResetTimes = item.resetTimes.length > 0 ? [...item.resetTimes] : [DEFAULT_RESET_TIME];
+		editingPushReminderEnabled = item.pushReminderEnabled;
+		editingPushReminderOffsetMinutes =
+			item.pushReminderOffsetMinutes === null ? '' : String(item.pushReminderOffsetMinutes);
 	}
 
 	function startCelebration(itemId: number) {
@@ -219,6 +239,7 @@
 
 	async function refreshPushState(): Promise<void> {
 		if (!browser) return;
+
 		notificationPermission = getNotificationPermissionState();
 		if (!isWebPushSupported() || notificationPermission === 'unsupported') {
 			isPushSubscribed = false;
@@ -322,9 +343,9 @@
 	}
 
 	onMount(() => {
-		if (!browser) return;
-
-		void refreshPushState();
+		if (browser) {
+			void refreshPushState();
+		}
 		void refreshReminder(true);
 
 		const timer = setInterval(() => {
@@ -362,12 +383,12 @@
 		<div class="flex flex-col gap-1">
 			<h1 class="text-3xl font-bold">Daily Check</h1>
 			<p class="text-sm text-muted-foreground">
-				출석 항목 리스트를 중심으로 관리하고, 추가/웹푸시 설정은 팝업에서 처리합니다.
+				출석 항목 리스트를 중심으로 관리하고, 항목 추가/수정/완료 상태를 빠르게 처리합니다.
 			</p>
 		</div>
 		<div class="flex flex-wrap gap-2">
 			<Button onclick={openCreateModal}>출석 항목 추가</Button>
-			<Button variant="outline" onclick={() => (isPushModalOpen = true)}>웹푸시 구독 설정</Button>
+			<Button variant="outline" onclick={() => (isPushModalOpen = true)}>웹푸시 설정</Button>
 		</div>
 	</div>
 
@@ -378,7 +399,7 @@
 	{:else}
 		<div class="grid gap-3 rounded-md border p-4 md:grid-cols-4">
 			<div class="rounded-md border p-3">
-				<p class="text-xs text-muted-foreground">총 구독 항목</p>
+				<p class="text-xs text-muted-foreground">총 항목</p>
 				<p class="text-2xl font-semibold">{itemViews.length}</p>
 			</div>
 			<div class="rounded-md border p-3">
@@ -416,7 +437,7 @@
 		<div class="grid gap-3">
 			<div class="rounded-md border p-4">
 				<div class="mb-3 flex items-center justify-between">
-					<h2 class="text-lg font-semibold">구독 리스트</h2>
+					<h2 class="text-lg font-semibold">항목 리스트</h2>
 					<p class="text-sm text-muted-foreground">링크 방문 후 완료 체크를 켜 주세요.</p>
 				</div>
 
@@ -485,6 +506,14 @@
 											{/if}
 											{#if item.estimatedMinutes !== null}
 												· 예상 {item.estimatedMinutes}분
+											{/if}
+											{#if item.pushReminderEnabled}
+												· 푸시 리마인드{' '}
+												{item.pushReminderOffsetMinutes === null
+													? `기본(${data.defaultPushReminderOffsetMinutes}분)`
+													: `${item.pushReminderOffsetMinutes}분`}
+											{:else}
+												· 푸시 리마인드 끔
 											{/if}
 										</p>
 										{#if item.notes}
@@ -643,6 +672,32 @@
 													class="rounded-md border px-3 py-2"
 													value={item.estimatedMinutes ?? ''}
 													placeholder="예: 10"
+												/>
+											</label>
+											<label class="grid gap-1">
+												<span class="text-sm">푸시 리마인드</span>
+												<input type="hidden" name="pushReminderEnabled" value="false" />
+												<span class="inline-flex items-center gap-2 text-sm">
+													<input
+														name="pushReminderEnabled"
+														type="checkbox"
+														value="true"
+														bind:checked={editingPushReminderEnabled}
+													/>
+													활성화
+												</span>
+											</label>
+											<label class="grid gap-1">
+												<span class="text-sm">리마인드 오프셋(분, 선택)</span>
+												<input
+													name="pushReminderOffsetMinutes"
+													type="number"
+													min="1"
+													max="1440"
+													class="rounded-md border px-3 py-2"
+													placeholder={`기본 ${data.defaultPushReminderOffsetMinutes}`}
+													bind:value={editingPushReminderOffsetMinutes}
+													disabled={!editingPushReminderEnabled}
 												/>
 											</label>
 											<label class="grid gap-1 md:col-span-2">
@@ -825,6 +880,32 @@
 							placeholder="예: 10"
 						/>
 					</label>
+					<label class="grid gap-1">
+						<span class="text-sm">푸시 리마인드</span>
+						<input type="hidden" name="pushReminderEnabled" value="false" />
+						<span class="inline-flex items-center gap-2 text-sm">
+							<input
+								name="pushReminderEnabled"
+								type="checkbox"
+								value="true"
+								bind:checked={createPushReminderEnabled}
+							/>
+							활성화
+						</span>
+					</label>
+					<label class="grid gap-1">
+						<span class="text-sm">리마인드 오프셋(분, 선택)</span>
+						<input
+							name="pushReminderOffsetMinutes"
+							class="rounded-md border px-3 py-2"
+							type="number"
+							min="1"
+							max="1440"
+							placeholder={`기본 ${data.defaultPushReminderOffsetMinutes}`}
+							bind:value={createPushReminderOffsetMinutes}
+							disabled={!createPushReminderEnabled}
+						/>
+					</label>
 					<label class="grid gap-1 md:col-span-2">
 						<span class="text-sm">메모 (선택)</span>
 						<textarea
@@ -861,7 +942,7 @@
 	>
 		<div class="w-full max-w-xl rounded-md border bg-background p-4 shadow-xl max-h-[calc(100dvh-4rem)] overflow-y-auto">
 			<div class="mb-3 flex items-center justify-between">
-				<h2 class="text-lg font-semibold">웹푸시 구독 설정</h2>
+				<h2 class="text-lg font-semibold">웹푸시 설정</h2>
 				<Button variant="outline" size="sm" onclick={() => (isPushModalOpen = false)}>닫기</Button>
 			</div>
 
@@ -877,14 +958,14 @@
 				{/if}
 				<div class="flex flex-wrap gap-2">
 					<Button onclick={handleEnablePush} disabled={isNotificationBusy || !data.vapidPublicKey}>
-						웹푸시 구독
+						구독 활성화
 					</Button>
 					<Button
 						variant="outline"
 						onclick={handleDisablePush}
 						disabled={isNotificationBusy || !isPushSubscribed}
 					>
-						웹푸시 해지
+						구독 해지
 					</Button>
 				</div>
 			</div>

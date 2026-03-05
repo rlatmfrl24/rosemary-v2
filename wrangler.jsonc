@@ -42,7 +42,8 @@
 	"vars": {
 		"APP_BASE_URL": "https://rosemary-v2.397love.workers.dev",
 		"WEB_PUSH_SUBJECT": "mailto:397love@gmail.com",
-		"VAPID_PUBLIC_KEY": "BGJ5FcKt-wE2ghSjgroQoTQGocVnDYiGt4lZn613CzCWXvFixJHiAlNpzGRbHVRYOu-itxdxzX32Lwq45UzXI4o"
+		"VAPID_PUBLIC_KEY": "BDqOP3Ob5dn-o_-jEL_XetKgYb43DgW4ZZzOs3gJqIYSMj4l311GiC_h39lzqn49_tnrF5TC0_UJyWpPv5zkODE",
+		"DAILY_CHECK_DEFAULT_OFFSET_MINUTES": "15"
 	},
 	/**
 	 * Secrets should be configured with:

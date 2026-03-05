@@ -99,6 +99,10 @@ export const daily_check_items = sqliteTable(
 		resetTimes: text('resetTimes').notNull().default('["09:00"]'),
 		resetTime: text('resetTime').notNull(),
 		timeZone: text('timeZone').notNull(),
+		pushReminderEnabled: integer('pushReminderEnabled', { mode: 'boolean' })
+			.notNull()
+			.default(true),
+		pushReminderOffsetMinutes: integer('pushReminderOffsetMinutes'),
 		completionCycleKey: text('completionCycleKey'),
 		completedAt: integer('completedAt'),
 		createdAt: integer('createdAt')
@@ -111,6 +115,9 @@ export const daily_check_items = sqliteTable(
 	(table) => ({
 		importanceIdx: index('daily_check_items_importance_idx').on(table.importance),
 		resetTimeIdx: index('daily_check_items_resetTime_idx').on(table.resetTime),
+		pushReminderEnabledIdx: index('daily_check_items_pushReminderEnabled_idx').on(
+			table.pushReminderEnabled
+		),
 		completionCycleIdx: index('daily_check_items_completionCycleKey_idx').on(table.completionCycleKey),
 		createdAtIdx: index('daily_check_items_createdAt_idx').on(table.createdAt)
 	})

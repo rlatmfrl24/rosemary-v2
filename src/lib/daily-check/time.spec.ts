@@ -12,6 +12,8 @@ const baseItem: DailyCheckItemRow = {
 	estimatedMinutes: 15,
 	resetTimes: ['09:00'],
 	timeZone: 'Asia/Seoul',
+	pushReminderEnabled: true,
+	pushReminderOffsetMinutes: null,
 	completionCycleKey: null,
 	completedAt: null,
 	createdAt: 0,

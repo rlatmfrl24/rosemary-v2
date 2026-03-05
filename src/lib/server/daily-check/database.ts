@@ -1,7 +1,6 @@
 import type {
 	DailyCheckFormInput,
 	DailyCheckItemRow,
-	DailyCheckItemView,
 	DailyReminder,
 	PushSubscriptionRow
 } from '$lib/daily-check/types';
@@ -12,9 +11,14 @@ import {
 	daily_check_notification_logs,
 	daily_check_push_subscriptions
 } from '$lib/server/db/schema';
-import { and, desc, eq, inArray, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/d1';
 import { ensureDailyCheckInfrastructure } from './infrastructure';
+import {
+	DEFAULT_PUSH_REMINDER_OFFSET_MINUTES,
+	getReminderDispatchCandidatesFromViews,
+	type ReminderDispatchCandidate
+} from './reminder-dispatch';
 
 const CHANNEL_WEB_PUSH = 'web_push' as const;
 
@@ -25,10 +29,7 @@ export interface PushSubscriptionInput {
 	userAgent: string | null;
 }
 
-export interface ReminderCandidate {
-	item: DailyCheckItemView;
-	cycleKey: string;
-}
+export type ReminderCandidate = ReminderDispatchCandidate;
 
 type DailyCheckItemDbRow = typeof daily_check_items.$inferSelect;
 
@@ -67,6 +68,8 @@ function toDailyCheckItemRow(row: DailyCheckItemDbRow): DailyCheckItemRow {
 		estimatedMinutes: row.estimatedMinutes ?? null,
 		resetTimes: parseResetTimes(row.resetTimes, row.resetTime),
 		timeZone: row.timeZone,
+		pushReminderEnabled: row.pushReminderEnabled ?? true,
+		pushReminderOffsetMinutes: row.pushReminderOffsetMinutes ?? null,
 		completionCycleKey: row.completionCycleKey ?? null,
 		completedAt: row.completedAt ?? null,
 		createdAt: row.createdAt,
@@ -111,6 +114,10 @@ export async function createDailyCheckItem(
 			resetTimes: JSON.stringify(normalizedResetTimes),
 			resetTime: primaryResetTime,
 			timeZone: input.timeZone,
+			pushReminderEnabled: input.pushReminderEnabled,
+			pushReminderOffsetMinutes: input.pushReminderEnabled
+				? input.pushReminderOffsetMinutes
+				: null,
 			completionCycleKey: null,
 			completedAt: null,
 			createdAt: now,
@@ -145,6 +152,10 @@ export async function updateDailyCheckItem(
 			resetTimes: JSON.stringify(normalizedResetTimes),
 			resetTime: primaryResetTime,
 			timeZone: input.timeZone,
+			pushReminderEnabled: input.pushReminderEnabled,
+			pushReminderOffsetMinutes: input.pushReminderEnabled
+				? input.pushReminderOffsetMinutes
+				: null,
 			updatedAt: Math.floor(Date.now() / 1000)
 		})
 		.where(eq(daily_check_items.id, id));
@@ -218,37 +229,42 @@ export async function getDailyReminder(db: D1Database, now: Date = new Date()): 
 
 export async function getReminderDispatchCandidates(
 	db: D1Database,
-	now: Date = new Date()
+	options?: {
+		now?: Date;
+		defaultOffsetMinutes?: number;
+	}
 ): Promise<ReminderCandidate[]> {
+	const now = options?.now ?? new Date();
+	const defaultOffsetMinutes = options?.defaultOffsetMinutes ?? DEFAULT_PUSH_REMINDER_OFFSET_MINUTES;
 	const rows = await getDailyCheckItems(db);
-	const dueItems = rows.map((item) => buildDailyCheckItemView(item, now)).filter((item) => !item.isCompleted);
-	if (dueItems.length === 0) return [];
+	const itemViews = rows.map((item) => buildDailyCheckItemView(item, now));
 
-	const itemIds = dueItems.map((item) => item.id);
+	const dueWithoutLogs = getReminderDispatchCandidatesFromViews(itemViews, {
+		now,
+		defaultOffsetMinutes
+	});
+	if (dueWithoutLogs.length === 0) return [];
+
+	const dueItemIds = [...new Set(dueWithoutLogs.map((candidate) => candidate.item.id))];
 	const database = createDatabase(db);
-	const sentLogs =
-		itemIds.length > 0
-			? await database
-					.select({
-						itemId: daily_check_notification_logs.itemId,
-						cycleKey: daily_check_notification_logs.cycleKey
-					})
-					.from(daily_check_notification_logs)
-					.where(
-						and(
-							eq(daily_check_notification_logs.channel, CHANNEL_WEB_PUSH),
-							inArray(daily_check_notification_logs.itemId, itemIds)
-						)
-					)
-			: [];
+	const sentLogs = await database
+		.select({
+			itemId: daily_check_notification_logs.itemId,
+			cycleKey: daily_check_notification_logs.cycleKey
+		})
+		.from(daily_check_notification_logs)
+		.where(
+			and(
+				eq(daily_check_notification_logs.channel, CHANNEL_WEB_PUSH),
+				inArray(daily_check_notification_logs.itemId, dueItemIds)
+			)
+		);
 
-	const sentSet = new Set(sentLogs.map((log) => `${log.itemId}:${log.cycleKey}`));
-	return dueItems
-		.filter((item) => !sentSet.has(`${item.id}:${item.currentCycleKey}`))
-		.map((item) => ({
-			item,
-			cycleKey: item.currentCycleKey
-		}));
+	return getReminderDispatchCandidatesFromViews(itemViews, {
+		now,
+		defaultOffsetMinutes,
+		sentLogs
+	});
 }
 
 export async function recordReminderDispatchLogs(
@@ -256,9 +272,9 @@ export async function recordReminderDispatchLogs(
 	candidates: ReminderCandidate[]
 ): Promise<void> {
 	if (candidates.length === 0) return;
+
 	const database = createDatabase(db);
 	const sentAt = Math.floor(Date.now() / 1000);
-
 	await database
 		.insert(daily_check_notification_logs)
 		.values(
@@ -386,7 +402,7 @@ export async function markPushSubscriptionError(
 		.update(daily_check_push_subscriptions)
 		.set({
 			lastError: errorMessage.slice(0, 500),
-			updatedAt: sql`(strftime('%s', 'now'))`
+			updatedAt: Math.floor(Date.now() / 1000)
 		})
 		.where(eq(daily_check_push_subscriptions.endpoint, endpoint));
 }

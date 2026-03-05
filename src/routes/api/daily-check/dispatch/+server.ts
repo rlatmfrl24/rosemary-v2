@@ -8,7 +8,11 @@ import {
 	removePushSubscriptionsByEndpoints
 } from '$lib/server/daily-check/database';
 import { ensureDailyCheckInfrastructure } from '$lib/server/daily-check/infrastructure';
-import { isExpiredSubscriptionStatus, sendWebPushNotification } from '$lib/server/daily-check/web-push';
+import {
+	isExpiredSubscriptionStatus,
+	sendWebPushNotification
+} from '$lib/server/daily-check/web-push';
+import { parseDefaultReminderOffsetMinutes } from '$lib/server/daily-check/reminder-dispatch';
 import { json, type RequestHandler } from '@sveltejs/kit';
 
 function getDb(platform: App.Platform | undefined): D1Database | null {
@@ -31,6 +35,20 @@ function unauthorizedResponse() {
 function extractBearerToken(authorizationHeader: string | null): string | null {
 	if (!authorizationHeader?.startsWith('Bearer ')) return null;
 	return authorizationHeader.slice('Bearer '.length).trim();
+}
+
+function createBaseResult(
+	values?: Partial<Omit<DispatchResult, 'success'>>
+): Omit<DispatchResult, 'success'> {
+	return {
+		candidateItems: values?.candidateItems ?? 0,
+		subscriptionCount: values?.subscriptionCount ?? 0,
+		dispatched: values?.dispatched ?? 0,
+		failed: values?.failed ?? 0,
+		invalidSubscriptions: values?.invalidSubscriptions ?? 0,
+		errors: values?.errors ?? [],
+		cycleKeys: values?.cycleKeys ?? []
+	};
 }
 
 export const POST: RequestHandler = async ({ platform, request }) => {
@@ -68,28 +86,26 @@ export const POST: RequestHandler = async ({ platform, request }) => {
 	}
 
 	await ensureDailyCheckInfrastructure(db);
-	const candidates = await getReminderDispatchCandidates(db);
-	if (candidates.length === 0) {
-		const emptyResult: DispatchResult = {
-			success: true,
-			dispatched: 0,
-			skipped: 0,
-			invalidSubscriptions: 0,
-			errors: [],
-			cycleKeys: []
-		};
-		return json(emptyResult, { headers: { 'Cache-Control': 'no-store' } });
-	}
+	const defaultOffsetMinutes = parseDefaultReminderOffsetMinutes(
+		platform?.env?.DAILY_CHECK_DEFAULT_OFFSET_MINUTES
+	);
+	const candidates = await getReminderDispatchCandidates(db, {
+		now: new Date(),
+		defaultOffsetMinutes
+	});
+	const cycleKeys = [...new Set(candidates.map((candidate) => candidate.cycleKey))];
 
 	const subscriptions = await getPushSubscriptions(db);
-	if (subscriptions.length === 0) {
+	const baseResult = createBaseResult({
+		candidateItems: candidates.length,
+		subscriptionCount: subscriptions.length,
+		cycleKeys
+	});
+
+	if (candidates.length === 0 || subscriptions.length === 0) {
 		const result: DispatchResult = {
 			success: true,
-			dispatched: 0,
-			skipped: candidates.length,
-			invalidSubscriptions: 0,
-			errors: [],
-			cycleKeys: [...new Set(candidates.map((candidate) => candidate.cycleKey))]
+			...baseResult
 		};
 		return json(result, { headers: { 'Cache-Control': 'no-store' } });
 	}
@@ -97,12 +113,12 @@ export const POST: RequestHandler = async ({ platform, request }) => {
 	const vapidPublicKey = platform?.env?.VAPID_PUBLIC_KEY;
 	const vapidPrivateKey = platform?.env?.VAPID_PRIVATE_KEY;
 	const subject = platform?.env?.WEB_PUSH_SUBJECT ?? 'mailto:daily-check@example.com';
-
 	if (!vapidPublicKey || !vapidPrivateKey) {
 		return json(
 			{
 				success: false,
-				error: 'VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY 가 설정되지 않았습니다.'
+				error: 'VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY 가 설정되지 않았습니다.',
+				...baseResult
 			},
 			{
 				status: 500,
@@ -154,11 +170,13 @@ export const POST: RequestHandler = async ({ platform, request }) => {
 
 	const response: DispatchResult = {
 		success: true,
+		candidateItems: candidates.length,
+		subscriptionCount: subscriptions.length,
 		dispatched: successEndpoints.length,
-		skipped: subscriptions.length - successEndpoints.length,
+		failed: subscriptions.length - successEndpoints.length,
 		invalidSubscriptions: invalidEndpoints.length,
 		errors,
-		cycleKeys: [...new Set(candidates.map((candidate) => candidate.cycleKey))]
+		cycleKeys
 	};
 
 	return json(response, {

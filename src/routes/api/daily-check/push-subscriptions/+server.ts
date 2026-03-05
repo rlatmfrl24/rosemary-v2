@@ -3,7 +3,6 @@ import {
 	upsertPushSubscription
 } from '$lib/server/daily-check/database';
 import { ensureDailyCheckInfrastructure } from '$lib/server/daily-check/infrastructure';
-import { dev } from '$app/environment';
 import { json, type RequestHandler } from '@sveltejs/kit';
 
 interface PushSubscriptionPayload {
@@ -18,117 +17,6 @@ interface PushSubscriptionPayload {
 	userAgent?: string;
 }
 
-function getDb(platform: App.Platform | undefined): D1Database | null {
-	return platform?.env?.DB ?? null;
-}
-
-function unauthorizedResponse(message: string) {
-	return json(
-		{
-			success: false,
-			error: message
-		},
-		{
-			status: 401,
-			headers: { 'Cache-Control': 'no-store' }
-		}
-	);
-}
-
-function extractBearerToken(authorizationHeader: string | null): string | null {
-	if (!authorizationHeader?.startsWith('Bearer ')) return null;
-	const token = authorizationHeader.slice('Bearer '.length).trim();
-	return token || null;
-}
-
-function parseAllowedEmails(raw: string | undefined): Set<string> {
-	if (!raw) return new Set();
-	return new Set(
-		raw
-			.split(',')
-			.map((value) => value.trim().toLowerCase())
-			.filter(Boolean)
-	);
-}
-
-function isLocalDevelopmentRequest(request: Request): boolean {
-	let parsed: URL;
-	try {
-		parsed = new URL(request.url);
-	} catch {
-		return false;
-	}
-
-	const host = parsed.hostname.toLowerCase();
-	const normalizedHost =
-		host.startsWith('[') && host.endsWith(']') ? host.slice(1, host.length - 1) : host;
-	if (normalizedHost === 'localhost' || normalizedHost.endsWith('.localhost')) return true;
-	if (normalizedHost === '::1' || normalizedHost === '0:0:0:0:0:0:0:1') return true;
-	if (/^127(?:\.\d{1,3}){3}$/.test(normalizedHost)) return true;
-	if (/^::ffff:127(?:\.\d{1,3}){3}$/.test(normalizedHost)) return true;
-	return false;
-}
-
-function isSameOriginBrowserRequest(request: Request): boolean {
-	let parsed: URL;
-	try {
-		parsed = new URL(request.url);
-	} catch {
-		return false;
-	}
-
-	const origin = request.headers.get('Origin');
-	const referer = request.headers.get('Referer');
-	const secFetchSite = request.headers.get('Sec-Fetch-Site')?.toLowerCase();
-	if (secFetchSite && secFetchSite !== 'same-origin' && secFetchSite !== 'same-site') {
-		return false;
-	}
-
-	let sameOriginMatched = false;
-	if (origin) {
-		sameOriginMatched = origin === parsed.origin;
-	}
-
-	if (!sameOriginMatched && referer) {
-		try {
-			sameOriginMatched = new URL(referer).origin === parsed.origin;
-		} catch {
-			return false;
-		}
-	}
-
-	return sameOriginMatched;
-}
-
-function isTrustedPushSubscriptionCaller(
-	request: Request,
-	platform: App.Platform | undefined
-): boolean {
-	if (dev || isLocalDevelopmentRequest(request)) return true;
-
-	const cronToken = platform?.env?.DAILY_CHECK_CRON_TOKEN;
-	const bearerToken = extractBearerToken(request.headers.get('Authorization'));
-	if (cronToken && bearerToken === cronToken) {
-		return true;
-	}
-
-	if (isSameOriginBrowserRequest(request)) {
-		return true;
-	}
-
-	const cfAccessEmail = request.headers.get('CF-Access-Authenticated-User-Email')?.trim().toLowerCase();
-	if (!cfAccessEmail) {
-		return false;
-	}
-
-	const allowedEmails = parseAllowedEmails(platform?.env?.DAILY_CHECK_ALLOWED_EMAILS);
-	if (allowedEmails.size === 0) {
-		return true;
-	}
-
-	return allowedEmails.has(cfAccessEmail);
-}
-
 const PUSH_ENDPOINT_PATTERNS: RegExp[] = [
 	/^https:\/\/fcm\.googleapis\.com\/fcm\/send\/[A-Za-z0-9_\-:.%]+$/,
 	/^https:\/\/updates\.push\.services\.mozilla\.com\/wpush\/v[0-9]+\/[A-Za-z0-9_\-:.%]+$/,
@@ -136,8 +24,11 @@ const PUSH_ENDPOINT_PATTERNS: RegExp[] = [
 	/^https:\/\/web\.push\.apple\.com\/\S+$/i,
 	/^https:\/\/(?:[a-z0-9-]+\.)?push\.apple\.com\/\S+$/i
 ];
-
 const BASE64_URL_PATTERN = /^[A-Za-z0-9\-_]+$/;
+
+function getDb(platform: App.Platform | undefined): D1Database | null {
+	return platform?.env?.DB ?? null;
+}
 
 function isValidPushEndpoint(endpoint: string): boolean {
 	if (endpoint.length < 16 || endpoint.length > 2048) return false;
@@ -151,7 +42,6 @@ function isValidPushEndpoint(endpoint: string): boolean {
 
 	if (parsed.protocol !== 'https:') return false;
 	if (parsed.username || parsed.password) return false;
-
 	return PUSH_ENDPOINT_PATTERNS.some((pattern) => pattern.test(endpoint));
 }
 
@@ -168,31 +58,20 @@ function parseSubscriptionInput(payload: PushSubscriptionPayload) {
 	const userAgentRaw = typeof payload.userAgent === 'string' ? payload.userAgent.trim() : '';
 	const userAgent = userAgentRaw ? userAgentRaw.slice(0, 500) : null;
 
-	if (!endpoint || !p256dh || !auth) {
-		return null;
-	}
-	if (!isValidPushEndpoint(endpoint)) {
-		return null;
-	}
-	if (!isValidBase64UrlToken(p256dh, 40, 512) || !isValidBase64UrlToken(auth, 12, 128)) {
-		return null;
-	}
+	if (!endpoint || !p256dh || !auth) return null;
+	if (!isValidPushEndpoint(endpoint)) return null;
+	if (!isValidBase64UrlToken(p256dh, 40, 512)) return null;
+	if (!isValidBase64UrlToken(auth, 12, 128)) return null;
 
-	return {
-		endpoint,
-		p256dh,
-		auth,
-		userAgent
-	};
+	return { endpoint, p256dh, auth, userAgent };
+}
+
+function parseEndpoint(payload: PushSubscriptionPayload | null): string {
+	const endpoint = typeof payload?.endpoint === 'string' ? payload.endpoint.trim() : '';
+	return endpoint;
 }
 
 export const POST: RequestHandler = async ({ platform, request }) => {
-	if (!isTrustedPushSubscriptionCaller(request, platform)) {
-		return unauthorizedResponse(
-			'Trusted caller authentication is required. (Cloudflare Access or Bearer token)'
-		);
-	}
-
 	const db = getDb(platform);
 	if (!db) {
 		return json(
@@ -261,12 +140,6 @@ export const POST: RequestHandler = async ({ platform, request }) => {
 };
 
 export const DELETE: RequestHandler = async ({ platform, request }) => {
-	if (!isTrustedPushSubscriptionCaller(request, platform)) {
-		return unauthorizedResponse(
-			'Trusted caller authentication is required. (Cloudflare Access or Bearer token)'
-		);
-	}
-
 	const db = getDb(platform);
 	if (!db) {
 		return json(
@@ -282,7 +155,7 @@ export const DELETE: RequestHandler = async ({ platform, request }) => {
 	}
 
 	const payload = (await request.json().catch(() => null)) as PushSubscriptionPayload | null;
-	const endpoint = typeof payload?.endpoint === 'string' ? payload.endpoint.trim() : '';
+	const endpoint = parseEndpoint(payload);
 	if (!endpoint || !isValidPushEndpoint(endpoint)) {
 		return json(
 			{
