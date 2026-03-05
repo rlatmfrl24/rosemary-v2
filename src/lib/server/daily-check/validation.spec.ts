@@ -11,6 +11,8 @@ function buildValidFormData(): FormData {
 	formData.set('estimatedMinutes', '15');
 	formData.append('resetTimes', '09:00');
 	formData.set('timeZone', 'Asia/Seoul');
+	formData.set('pushReminderEnabled', 'true');
+	formData.set('pushReminderOffsetMinutes', '15');
 	return formData;
 }
 
@@ -22,6 +24,8 @@ describe('daily-check form validation', () => {
 		expect(result.data?.estimatedMinutes).toBe(15);
 		expect(result.data?.importance).toBe('normal');
 		expect(result.data?.resetTimes).toEqual(['09:00']);
+		expect(result.data?.pushReminderEnabled).toBe(true);
+		expect(result.data?.pushReminderOffsetMinutes).toBe(15);
 	});
 
 	it('fails when required fields are missing', () => {
@@ -82,5 +86,36 @@ describe('daily-check form validation', () => {
 		const result = parseDailyCheckFormInput(formData);
 		expect(result.success).toBe(true);
 		expect(result.data?.estimatedMinutes).toBeNull();
+	});
+
+	it('uses enabled=true and offset=null defaults when reminder fields are missing', () => {
+		const formData = buildValidFormData();
+		formData.delete('pushReminderEnabled');
+		formData.delete('pushReminderOffsetMinutes');
+
+		const result = parseDailyCheckFormInput(formData);
+		expect(result.success).toBe(true);
+		expect(result.data?.pushReminderEnabled).toBe(true);
+		expect(result.data?.pushReminderOffsetMinutes).toBeNull();
+	});
+
+	it('forces offset to null when reminder is disabled', () => {
+		const formData = buildValidFormData();
+		formData.set('pushReminderEnabled', 'false');
+		formData.set('pushReminderOffsetMinutes', '30');
+
+		const result = parseDailyCheckFormInput(formData);
+		expect(result.success).toBe(true);
+		expect(result.data?.pushReminderEnabled).toBe(false);
+		expect(result.data?.pushReminderOffsetMinutes).toBeNull();
+	});
+
+	it('rejects invalid reminder offset', () => {
+		const formData = buildValidFormData();
+		formData.set('pushReminderOffsetMinutes', '2000');
+
+		const result = parseDailyCheckFormInput(formData);
+		expect(result.success).toBe(false);
+		expect(result.error).toContain('리마인드 오프셋');
 	});
 });

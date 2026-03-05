@@ -8,6 +8,8 @@ export interface DailyCheckItemRow {
 	estimatedMinutes: number | null;
 	resetTimes: string[];
 	timeZone: string;
+	pushReminderEnabled: boolean;
+	pushReminderOffsetMinutes: number | null;
 	completionCycleKey: string | null;
 	completedAt: number | null;
 	createdAt: number;
@@ -33,6 +35,8 @@ export interface DailyCheckFormInput {
 	estimatedMinutes: number | null;
 	resetTimes: string[];
 	timeZone: string;
+	pushReminderEnabled: boolean;
+	pushReminderOffsetMinutes: number | null;
 }
 
 export interface DailyReminderItem {
@@ -54,4 +58,27 @@ export interface DailyReminder {
 	totalEstimatedMinutes: number;
 	cycleKeys: string[];
 	items: DailyReminderItem[];
+}
+
+export interface PushSubscriptionRow {
+	id: number;
+	endpoint: string;
+	p256dh: string;
+	auth: string;
+	userAgent: string | null;
+	lastSuccessAt: number | null;
+	lastError: string | null;
+	createdAt: number;
+	updatedAt: number;
+}
+
+export interface DispatchResult {
+	success: boolean;
+	candidateItems: number;
+	subscriptionCount: number;
+	dispatched: number;
+	failed: number;
+	invalidSubscriptions: number;
+	errors: string[];
+	cycleKeys: string[];
 }

@@ -10,6 +10,14 @@
 		type DailyCheckItemView,
 		type DailyReminder
 	} from '$lib/daily-check';
+	import {
+		getNotificationPermissionState,
+		hasActivePushSubscription,
+		isWebPushSupported,
+		subscribeToDailyCheckPush,
+		syncDailyCheckPushSubscription,
+		unsubscribeFromDailyCheckPush
+	} from '$lib/daily-check/notifications';
 	import Button from '$lib/components/ui/button/button.svelte';
 	import type { PageData } from './$types';
 
@@ -27,13 +35,21 @@
 	let reminder = $state<DailyReminder | null>(null);
 	let reminderError = $state<string | null>(null);
 	let reminderToastKey = $state<string | null>(null);
+	let notificationPermission = $state<NotificationPermission | 'unsupported'>('unsupported');
+	let isPushSubscribed = $state(false);
+	let isNotificationBusy = $state(false);
 	let isCreateModalOpen = $state(false);
+	let isPushModalOpen = $state(false);
 	let createKind = $state<string>('site_visit');
 	let createImportance = $state<string>(data.defaultImportance);
 	let createResetTimes = $state<string[]>([DEFAULT_RESET_TIME]);
+	let createPushReminderEnabled = $state(true);
+	let createPushReminderOffsetMinutes = $state<string>('');
 	let editingKind = $state<string>('site_visit');
 	let editingImportance = $state<string>(data.defaultImportance);
 	let editingResetTimes = $state<string[]>([DEFAULT_RESET_TIME]);
+	let editingPushReminderEnabled = $state(true);
+	let editingPushReminderOffsetMinutes = $state<string>('');
 	let celebrationItemIds = $state<number[]>([]);
 	const previousCompletionMap = new Map<number, boolean>();
 
@@ -97,6 +113,8 @@
 		createKind = 'site_visit';
 		createImportance = data.defaultImportance;
 		createResetTimes = [DEFAULT_RESET_TIME];
+		createPushReminderEnabled = true;
+		createPushReminderOffsetMinutes = '';
 	}
 
 	function resetEditState() {
@@ -104,6 +122,8 @@
 		editingKind = 'site_visit';
 		editingImportance = data.defaultImportance;
 		editingResetTimes = [DEFAULT_RESET_TIME];
+		editingPushReminderEnabled = true;
+		editingPushReminderOffsetMinutes = '';
 	}
 
 	function addCreateResetTime() {
@@ -146,6 +166,9 @@
 		editingKind = item.kind;
 		editingImportance = item.importance;
 		editingResetTimes = item.resetTimes.length > 0 ? [...item.resetTimes] : [DEFAULT_RESET_TIME];
+		editingPushReminderEnabled = item.pushReminderEnabled;
+		editingPushReminderOffsetMinutes =
+			item.pushReminderOffsetMinutes === null ? '' : String(item.pushReminderOffsetMinutes);
 	}
 
 	function startCelebration(itemId: number) {
@@ -166,10 +189,14 @@
 		return data ?? null;
 	}
 
-	function closeModalOnBackdrop(event: MouseEvent) {
+	function closeModalOnBackdrop(event: MouseEvent, modal: 'create' | 'push') {
 		if (event.target !== event.currentTarget) return;
-		isCreateModalOpen = false;
-		resetCreateFormState();
+		if (modal === 'create') {
+			isCreateModalOpen = false;
+			resetCreateFormState();
+			return;
+		}
+		isPushModalOpen = false;
 	}
 
 	async function refreshReminder(showToast: boolean): Promise<void> {
@@ -207,6 +234,26 @@
 		} catch (error) {
 			console.warn('Failed to refresh reminder', error);
 			reminderError = '리마인더 정보를 불러오지 못했습니다.';
+		}
+	}
+
+	async function refreshPushState(): Promise<void> {
+		if (!browser) return;
+
+		notificationPermission = getNotificationPermissionState();
+		if (!isWebPushSupported() || notificationPermission === 'unsupported') {
+			isPushSubscribed = false;
+			return;
+		}
+
+		try {
+			if (notificationPermission === 'granted' && data.vapidPublicKey) {
+				await syncDailyCheckPushSubscription(data.vapidPublicKey);
+			}
+			isPushSubscribed = await hasActivePushSubscription();
+		} catch (error) {
+			console.warn('Failed to refresh push state', error);
+			isPushSubscribed = false;
 		}
 	}
 
@@ -256,7 +303,49 @@
 		form.requestSubmit();
 	};
 
+	async function handleEnablePush(): Promise<void> {
+		if (!data.vapidPublicKey) {
+			toast.error('VAPID 공개키가 설정되지 않았습니다.');
+			return;
+		}
+
+		isNotificationBusy = true;
+		try {
+			const result = await subscribeToDailyCheckPush(data.vapidPublicKey);
+			if (result.success) {
+				toast.success(result.message);
+			} else {
+				toast.error(result.message);
+			}
+		} catch (error) {
+			toast.error(error instanceof Error ? error.message : '웹푸시 활성화에 실패했습니다.');
+		} finally {
+			await refreshPushState();
+			isNotificationBusy = false;
+		}
+	}
+
+	async function handleDisablePush(): Promise<void> {
+		isNotificationBusy = true;
+		try {
+			const result = await unsubscribeFromDailyCheckPush();
+			if (result.success) {
+				toast.success(result.message);
+			} else {
+				toast.error(result.message);
+			}
+		} catch (error) {
+			toast.error(error instanceof Error ? error.message : '웹푸시 해지에 실패했습니다.');
+		} finally {
+			await refreshPushState();
+			isNotificationBusy = false;
+		}
+	}
+
 	onMount(() => {
+		if (browser) {
+			void refreshPushState();
+		}
 		void refreshReminder(true);
 
 		const timer = setInterval(() => {
@@ -299,6 +388,7 @@
 		</div>
 		<div class="flex flex-wrap gap-2">
 			<Button onclick={openCreateModal}>출석 항목 추가</Button>
+			<Button variant="outline" onclick={() => (isPushModalOpen = true)}>웹푸시 설정</Button>
 		</div>
 	</div>
 
@@ -416,6 +506,14 @@
 											{/if}
 											{#if item.estimatedMinutes !== null}
 												· 예상 {item.estimatedMinutes}분
+											{/if}
+											{#if item.pushReminderEnabled}
+												· 푸시 리마인드{' '}
+												{item.pushReminderOffsetMinutes === null
+													? `기본(${data.defaultPushReminderOffsetMinutes}분)`
+													: `${item.pushReminderOffsetMinutes}분`}
+											{:else}
+												· 푸시 리마인드 끔
 											{/if}
 										</p>
 										{#if item.notes}
@@ -576,6 +674,32 @@
 													placeholder="예: 10"
 												/>
 											</label>
+											<label class="grid gap-1">
+												<span class="text-sm">푸시 리마인드</span>
+												<input type="hidden" name="pushReminderEnabled" value="false" />
+												<span class="inline-flex items-center gap-2 text-sm">
+													<input
+														name="pushReminderEnabled"
+														type="checkbox"
+														value="true"
+														bind:checked={editingPushReminderEnabled}
+													/>
+													활성화
+												</span>
+											</label>
+											<label class="grid gap-1">
+												<span class="text-sm">리마인드 오프셋(분, 선택)</span>
+												<input
+													name="pushReminderOffsetMinutes"
+													type="number"
+													min="1"
+													max="1440"
+													class="rounded-md border px-3 py-2"
+													placeholder={`기본 ${data.defaultPushReminderOffsetMinutes}`}
+													bind:value={editingPushReminderOffsetMinutes}
+													disabled={!editingPushReminderEnabled}
+												/>
+											</label>
 											<label class="grid gap-1 md:col-span-2">
 												<span class="text-sm">메모 (선택)</span>
 												<textarea
@@ -617,7 +741,7 @@
 	<div
 		class="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-4 pb-6 pt-8"
 		role="presentation"
-		onclick={(event) => closeModalOnBackdrop(event)}
+		onclick={(event) => closeModalOnBackdrop(event, 'create')}
 	>
 		<div class="w-full max-w-3xl rounded-md border bg-background p-4 shadow-xl max-h-[calc(100dvh-4rem)] overflow-y-auto">
 			<div class="mb-3 flex items-center justify-between">
@@ -756,6 +880,32 @@
 							placeholder="예: 10"
 						/>
 					</label>
+					<label class="grid gap-1">
+						<span class="text-sm">푸시 리마인드</span>
+						<input type="hidden" name="pushReminderEnabled" value="false" />
+						<span class="inline-flex items-center gap-2 text-sm">
+							<input
+								name="pushReminderEnabled"
+								type="checkbox"
+								value="true"
+								bind:checked={createPushReminderEnabled}
+							/>
+							활성화
+						</span>
+					</label>
+					<label class="grid gap-1">
+						<span class="text-sm">리마인드 오프셋(분, 선택)</span>
+						<input
+							name="pushReminderOffsetMinutes"
+							class="rounded-md border px-3 py-2"
+							type="number"
+							min="1"
+							max="1440"
+							placeholder={`기본 ${data.defaultPushReminderOffsetMinutes}`}
+							bind:value={createPushReminderOffsetMinutes}
+							disabled={!createPushReminderEnabled}
+						/>
+					</label>
 					<label class="grid gap-1 md:col-span-2">
 						<span class="text-sm">메모 (선택)</span>
 						<textarea
@@ -780,6 +930,45 @@
 					<Button type="submit">추가</Button>
 				</div>
 			</form>
+		</div>
+	</div>
+{/if}
+
+{#if isPushModalOpen}
+	<div
+		class="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-4 pb-6 pt-8"
+		role="presentation"
+		onclick={(event) => closeModalOnBackdrop(event, 'push')}
+	>
+		<div class="w-full max-w-xl rounded-md border bg-background p-4 shadow-xl max-h-[calc(100dvh-4rem)] overflow-y-auto">
+			<div class="mb-3 flex items-center justify-between">
+				<h2 class="text-lg font-semibold">웹푸시 설정</h2>
+				<Button variant="outline" size="sm" onclick={() => (isPushModalOpen = false)}>닫기</Button>
+			</div>
+
+			<div class="grid gap-3 rounded-md border p-3">
+				<p class="text-sm">
+					현재 권한: <strong>{notificationPermission}</strong>
+				</p>
+				<p class="text-sm">
+					현재 구독 상태: <strong>{isPushSubscribed ? '활성' : '비활성'}</strong>
+				</p>
+				{#if !data.vapidPublicKey}
+					<p class="text-sm text-destructive">서버에 `VAPID_PUBLIC_KEY`가 설정되지 않았습니다.</p>
+				{/if}
+				<div class="flex flex-wrap gap-2">
+					<Button onclick={handleEnablePush} disabled={isNotificationBusy || !data.vapidPublicKey}>
+						구독 활성화
+					</Button>
+					<Button
+						variant="outline"
+						onclick={handleDisablePush}
+						disabled={isNotificationBusy || !isPushSubscribed}
+					>
+						구독 해지
+					</Button>
+				</div>
+			</div>
 		</div>
 	</div>
 {/if}

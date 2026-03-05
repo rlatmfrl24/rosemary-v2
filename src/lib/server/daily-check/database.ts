@@ -1,15 +1,35 @@
 import type {
 	DailyCheckFormInput,
 	DailyCheckItemRow,
-	DailyCheckItemView,
-	DailyReminder
+	DailyReminder,
+	PushSubscriptionRow
 } from '$lib/daily-check/types';
 import { buildDailyCheckItemView, normalizeResetTimes } from '$lib/daily-check/time';
 import { DEFAULT_DAILY_CHECK_IMPORTANCE } from '$lib/daily-check/constants';
-import { daily_check_items } from '$lib/server/db/schema';
-import { desc, eq } from 'drizzle-orm';
+import {
+	daily_check_items,
+	daily_check_notification_logs,
+	daily_check_push_subscriptions
+} from '$lib/server/db/schema';
+import { and, desc, eq, inArray } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/d1';
 import { ensureDailyCheckInfrastructure } from './infrastructure';
+import {
+	DEFAULT_PUSH_REMINDER_OFFSET_MINUTES,
+	getReminderDispatchCandidatesFromViews,
+	type ReminderDispatchCandidate
+} from './reminder-dispatch';
+
+const CHANNEL_WEB_PUSH = 'web_push' as const;
+
+export interface PushSubscriptionInput {
+	endpoint: string;
+	p256dh: string;
+	auth: string;
+	userAgent: string | null;
+}
+
+export type ReminderCandidate = ReminderDispatchCandidate;
 
 type DailyCheckItemDbRow = typeof daily_check_items.$inferSelect;
 
@@ -48,6 +68,8 @@ function toDailyCheckItemRow(row: DailyCheckItemDbRow): DailyCheckItemRow {
 		estimatedMinutes: row.estimatedMinutes ?? null,
 		resetTimes: parseResetTimes(row.resetTimes, row.resetTime),
 		timeZone: row.timeZone,
+		pushReminderEnabled: row.pushReminderEnabled ?? true,
+		pushReminderOffsetMinutes: row.pushReminderOffsetMinutes ?? null,
 		completionCycleKey: row.completionCycleKey ?? null,
 		completedAt: row.completedAt ?? null,
 		createdAt: row.createdAt,
@@ -92,6 +114,10 @@ export async function createDailyCheckItem(
 			resetTimes: JSON.stringify(normalizedResetTimes),
 			resetTime: primaryResetTime,
 			timeZone: input.timeZone,
+			pushReminderEnabled: input.pushReminderEnabled,
+			pushReminderOffsetMinutes: input.pushReminderEnabled
+				? input.pushReminderOffsetMinutes
+				: null,
 			completionCycleKey: null,
 			completedAt: null,
 			createdAt: now,
@@ -126,6 +152,10 @@ export async function updateDailyCheckItem(
 			resetTimes: JSON.stringify(normalizedResetTimes),
 			resetTime: primaryResetTime,
 			timeZone: input.timeZone,
+			pushReminderEnabled: input.pushReminderEnabled,
+			pushReminderOffsetMinutes: input.pushReminderEnabled
+				? input.pushReminderOffsetMinutes
+				: null,
 			updatedAt: Math.floor(Date.now() / 1000)
 		})
 		.where(eq(daily_check_items.id, id));
@@ -195,4 +225,184 @@ export async function getDailyReminder(db: D1Database, now: Date = new Date()): 
 			cycleKey: item.currentCycleKey
 		}))
 	};
+}
+
+export async function getReminderDispatchCandidates(
+	db: D1Database,
+	options?: {
+		now?: Date;
+		defaultOffsetMinutes?: number;
+	}
+): Promise<ReminderCandidate[]> {
+	const now = options?.now ?? new Date();
+	const defaultOffsetMinutes = options?.defaultOffsetMinutes ?? DEFAULT_PUSH_REMINDER_OFFSET_MINUTES;
+	const rows = await getDailyCheckItems(db);
+	const itemViews = rows.map((item) => buildDailyCheckItemView(item, now));
+
+	const dueWithoutLogs = getReminderDispatchCandidatesFromViews(itemViews, {
+		now,
+		defaultOffsetMinutes
+	});
+	if (dueWithoutLogs.length === 0) return [];
+
+	const dueItemIds = [...new Set(dueWithoutLogs.map((candidate) => candidate.item.id))];
+	const database = createDatabase(db);
+	const sentLogs = await database
+		.select({
+			itemId: daily_check_notification_logs.itemId,
+			cycleKey: daily_check_notification_logs.cycleKey
+		})
+		.from(daily_check_notification_logs)
+		.where(
+			and(
+				eq(daily_check_notification_logs.channel, CHANNEL_WEB_PUSH),
+				inArray(daily_check_notification_logs.itemId, dueItemIds)
+			)
+		);
+
+	return getReminderDispatchCandidatesFromViews(itemViews, {
+		now,
+		defaultOffsetMinutes,
+		sentLogs
+	});
+}
+
+export async function recordReminderDispatchLogs(
+	db: D1Database,
+	candidates: ReminderCandidate[]
+): Promise<void> {
+	if (candidates.length === 0) return;
+
+	const database = createDatabase(db);
+	const sentAt = Math.floor(Date.now() / 1000);
+	await database
+		.insert(daily_check_notification_logs)
+		.values(
+			candidates.map((candidate) => ({
+				itemId: candidate.item.id,
+				cycleKey: candidate.cycleKey,
+				channel: CHANNEL_WEB_PUSH,
+				sentAt
+			}))
+		)
+		.onConflictDoNothing({
+			target: [
+				daily_check_notification_logs.itemId,
+				daily_check_notification_logs.cycleKey,
+				daily_check_notification_logs.channel
+			]
+		});
+}
+
+export async function upsertPushSubscription(
+	db: D1Database,
+	input: PushSubscriptionInput
+): Promise<PushSubscriptionRow | null> {
+	await ensureDailyCheckInfrastructure(db);
+	const database = createDatabase(db);
+	const now = Math.floor(Date.now() / 1000);
+
+	const [upserted] = await database
+		.insert(daily_check_push_subscriptions)
+		.values({
+			endpoint: input.endpoint,
+			p256dh: input.p256dh,
+			auth: input.auth,
+			userAgent: input.userAgent,
+			lastSuccessAt: null,
+			lastError: null,
+			createdAt: now,
+			updatedAt: now
+		})
+		.onConflictDoUpdate({
+			target: daily_check_push_subscriptions.endpoint,
+			set: {
+				p256dh: input.p256dh,
+				auth: input.auth,
+				userAgent: input.userAgent,
+				lastError: null,
+				updatedAt: now
+			}
+		})
+		.returning();
+
+	return (upserted as PushSubscriptionRow | undefined) ?? null;
+}
+
+export async function removePushSubscriptionByEndpoint(
+	db: D1Database,
+	endpoint: string
+): Promise<boolean> {
+	await ensureDailyCheckInfrastructure(db);
+	const database = createDatabase(db);
+	const [existing] = await database
+		.select({ id: daily_check_push_subscriptions.id })
+		.from(daily_check_push_subscriptions)
+		.where(eq(daily_check_push_subscriptions.endpoint, endpoint))
+		.limit(1);
+	if (!existing) return false;
+
+	await database
+		.delete(daily_check_push_subscriptions)
+		.where(eq(daily_check_push_subscriptions.endpoint, endpoint));
+	return true;
+}
+
+export async function removePushSubscriptionsByEndpoints(
+	db: D1Database,
+	endpoints: string[]
+): Promise<number> {
+	await ensureDailyCheckInfrastructure(db);
+	const uniqueEndpoints = [...new Set(endpoints.filter(Boolean))];
+	if (uniqueEndpoints.length === 0) return 0;
+
+	const database = createDatabase(db);
+	await database
+		.delete(daily_check_push_subscriptions)
+		.where(inArray(daily_check_push_subscriptions.endpoint, uniqueEndpoints));
+	return uniqueEndpoints.length;
+}
+
+export async function getPushSubscriptions(db: D1Database): Promise<PushSubscriptionRow[]> {
+	await ensureDailyCheckInfrastructure(db);
+	const database = createDatabase(db);
+	const rows = await database
+		.select()
+		.from(daily_check_push_subscriptions)
+		.orderBy(desc(daily_check_push_subscriptions.updatedAt), desc(daily_check_push_subscriptions.id));
+	return rows as PushSubscriptionRow[];
+}
+
+export async function markPushSubscriptionSuccesses(
+	db: D1Database,
+	endpoints: string[]
+): Promise<void> {
+	if (endpoints.length === 0) return;
+	const database = createDatabase(db);
+	const uniqueEndpoints = [...new Set(endpoints)];
+	const now = Math.floor(Date.now() / 1000);
+
+	await database
+		.update(daily_check_push_subscriptions)
+		.set({
+			lastSuccessAt: now,
+			lastError: null,
+			updatedAt: now
+		})
+		.where(inArray(daily_check_push_subscriptions.endpoint, uniqueEndpoints));
+}
+
+export async function markPushSubscriptionError(
+	db: D1Database,
+	endpoint: string,
+	errorMessage: string
+): Promise<void> {
+	const database = createDatabase(db);
+	await database
+		.update(daily_check_push_subscriptions)
+		.set({
+			lastError: errorMessage.slice(0, 500),
+			updatedAt: Math.floor(Date.now() / 1000)
+		})
+		.where(eq(daily_check_push_subscriptions.endpoint, endpoint));
 }

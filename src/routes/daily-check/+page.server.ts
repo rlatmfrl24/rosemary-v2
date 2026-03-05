@@ -5,6 +5,7 @@ import {
 	DEFAULT_DAILY_CHECK_IMPORTANCE
 } from '$lib/daily-check/constants';
 import { DEFAULT_DAILY_CHECK_TIME_ZONE } from '$lib/daily-check/time';
+import { parseDefaultReminderOffsetMinutes } from '$lib/server/daily-check/reminder-dispatch';
 import {
 	createDailyCheckItem,
 	deleteDailyCheckItem,
@@ -48,6 +49,8 @@ export const load: PageServerLoad = async ({ platform }) => {
 			importanceOptions: DAILY_CHECK_IMPORTANCE_OPTIONS,
 			defaultTimeZone: DEFAULT_DAILY_CHECK_TIME_ZONE,
 			defaultImportance: DEFAULT_DAILY_CHECK_IMPORTANCE,
+			vapidPublicKey: null,
+			defaultPushReminderOffsetMinutes: parseDefaultReminderOffsetMinutes(undefined),
 			dbUnavailable: true
 		};
 	}
@@ -62,6 +65,10 @@ export const load: PageServerLoad = async ({ platform }) => {
 		importanceOptions: DAILY_CHECK_IMPORTANCE_OPTIONS,
 		defaultTimeZone: DEFAULT_DAILY_CHECK_TIME_ZONE,
 		defaultImportance: DEFAULT_DAILY_CHECK_IMPORTANCE,
+		vapidPublicKey: platform?.env?.VAPID_PUBLIC_KEY ?? null,
+		defaultPushReminderOffsetMinutes: parseDefaultReminderOffsetMinutes(
+			platform?.env?.DAILY_CHECK_DEFAULT_OFFSET_MINUTES
+		),
 		dbUnavailable: false
 	};
 };

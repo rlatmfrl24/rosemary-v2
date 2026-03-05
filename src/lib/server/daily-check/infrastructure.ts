@@ -10,6 +10,8 @@ const SQL_STATEMENTS = [
 		"resetTimes" text DEFAULT '["09:00"]' NOT NULL,
 		"resetTime" text NOT NULL,
 		"timeZone" text NOT NULL,
+		"pushReminderEnabled" integer DEFAULT 1 NOT NULL,
+		"pushReminderOffsetMinutes" integer,
 		"completionCycleKey" text,
 		"completedAt" integer,
 		"createdAt" integer DEFAULT (strftime('%s', 'now')) NOT NULL,
@@ -17,10 +19,41 @@ const SQL_STATEMENTS = [
 	)`,
 	`CREATE INDEX IF NOT EXISTS "daily_check_items_importance_idx" ON "daily_check_items" ("importance")`,
 	`CREATE INDEX IF NOT EXISTS "daily_check_items_resetTime_idx" ON "daily_check_items" ("resetTime")`,
+	`CREATE INDEX IF NOT EXISTS "daily_check_items_pushReminderEnabled_idx" ON "daily_check_items" ("pushReminderEnabled")`,
 	`CREATE INDEX IF NOT EXISTS "daily_check_items_completionCycleKey_idx" ON "daily_check_items" ("completionCycleKey")`,
 	`CREATE INDEX IF NOT EXISTS "daily_check_items_createdAt_idx" ON "daily_check_items" ("createdAt")`,
+	`CREATE TABLE IF NOT EXISTS "daily_check_push_subscriptions" (
+		"id" integer PRIMARY KEY AUTOINCREMENT NOT NULL,
+		"endpoint" text NOT NULL,
+		"p256dh" text NOT NULL,
+		"auth" text NOT NULL,
+		"userAgent" text,
+		"lastSuccessAt" integer,
+		"lastError" text,
+		"createdAt" integer DEFAULT (strftime('%s', 'now')) NOT NULL,
+		"updatedAt" integer DEFAULT (strftime('%s', 'now')) NOT NULL
+	)`,
+	`CREATE UNIQUE INDEX IF NOT EXISTS "daily_check_push_subscriptions_endpoint_unique"
+	 ON "daily_check_push_subscriptions" ("endpoint")`,
+	`CREATE INDEX IF NOT EXISTS "daily_check_push_subscriptions_updatedAt_idx"
+	 ON "daily_check_push_subscriptions" ("updatedAt")`,
+	`CREATE TABLE IF NOT EXISTS "daily_check_notification_logs" (
+		"id" integer PRIMARY KEY AUTOINCREMENT NOT NULL,
+		"itemId" integer NOT NULL REFERENCES "daily_check_items"("id") ON DELETE cascade,
+		"cycleKey" text NOT NULL,
+		"channel" text DEFAULT 'web_push' NOT NULL,
+		"sentAt" integer DEFAULT (strftime('%s', 'now')) NOT NULL
+	)`,
+	`CREATE UNIQUE INDEX IF NOT EXISTS "daily_check_notification_logs_item_cycle_channel_unique"
+	 ON "daily_check_notification_logs" ("itemId", "cycleKey", "channel")`,
+	`CREATE INDEX IF NOT EXISTS "daily_check_notification_logs_cycle_idx"
+	 ON "daily_check_notification_logs" ("cycleKey")`,
+	`CREATE INDEX IF NOT EXISTS "daily_check_notification_logs_sentAt_idx"
+	 ON "daily_check_notification_logs" ("sentAt")`,
 	`ALTER TABLE "daily_check_items" ADD COLUMN "importance" text DEFAULT 'normal' NOT NULL`,
 	`ALTER TABLE "daily_check_items" ADD COLUMN "resetTimes" text DEFAULT '["09:00"]' NOT NULL`,
+	`ALTER TABLE "daily_check_items" ADD COLUMN "pushReminderEnabled" integer DEFAULT 1 NOT NULL`,
+	`ALTER TABLE "daily_check_items" ADD COLUMN "pushReminderOffsetMinutes" integer`,
 	`UPDATE "daily_check_items"
 	 SET "importance" = 'normal'
 	 WHERE "importance" IS NULL OR trim("importance") = ''`,
@@ -29,6 +62,9 @@ const SQL_STATEMENTS = [
 	 WHERE ("resetTimes" IS NULL OR trim("resetTimes") = '' OR "resetTimes" = '[]')
 	   AND "resetTime" IS NOT NULL
 	   AND trim("resetTime") != ''`,
+	`UPDATE "daily_check_items"
+	 SET "pushReminderEnabled" = 1
+	 WHERE "pushReminderEnabled" IS NULL`,
 ] as const;
 
 let bootstrapDone = false;

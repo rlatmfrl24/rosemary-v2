@@ -28,6 +28,23 @@ function parseEstimatedMinutes(raw: string): number | null {
 	return Math.floor(parsed);
 }
 
+function parseReminderOffsetMinutes(raw: string): number | null {
+	if (!raw) return null;
+	const parsed = Number(raw);
+	if (!Number.isFinite(parsed)) return Number.NaN;
+	return Math.floor(parsed);
+}
+
+function parsePushReminderEnabled(formData: FormData): boolean {
+	const values = formData
+		.getAll('pushReminderEnabled')
+		.filter((value): value is string => typeof value === 'string')
+		.map((value) => value.trim().toLowerCase());
+
+	if (values.length === 0) return true;
+	return values.some((value) => value === 'true' || value === '1' || value === 'on');
+}
+
 function validateUrl(rawUrl: string): boolean {
 	try {
 		const parsed = new URL(rawUrl);
@@ -59,6 +76,8 @@ export function parseDailyCheckFormInput(formData: FormData): ValidationResult<D
 		.filter(Boolean);
 	const timeZoneRaw = getTextValue(formData, 'timeZone');
 	const timeZone = timeZoneRaw || DEFAULT_DAILY_CHECK_TIME_ZONE;
+	const pushReminderEnabled = parsePushReminderEnabled(formData);
+	const pushReminderOffsetMinutesRaw = getTextValue(formData, 'pushReminderOffsetMinutes');
 
 	if (!title) {
 		return { success: false, error: '출석 항목 제목은 필수입니다.' };
@@ -97,6 +116,17 @@ export function parseDailyCheckFormInput(formData: FormData): ValidationResult<D
 		return { success: false, error: '예상 소요시간은 1~1440분 사이여야 합니다.' };
 	}
 
+	const pushReminderOffsetMinutes = parseReminderOffsetMinutes(pushReminderOffsetMinutesRaw);
+	if (Number.isNaN(pushReminderOffsetMinutes)) {
+		return { success: false, error: '리마인드 오프셋은 숫자로 입력해야 합니다.' };
+	}
+	if (
+		pushReminderOffsetMinutes !== null &&
+		(pushReminderOffsetMinutes < 1 || pushReminderOffsetMinutes > 1440)
+	) {
+		return { success: false, error: '리마인드 오프셋은 1~1440분 사이여야 합니다.' };
+	}
+
 	if (resetTimeValues.length === 0) {
 		return { success: false, error: '리셋 시간은 최소 1개 이상 필요합니다.' };
 	}
@@ -122,7 +152,9 @@ export function parseDailyCheckFormInput(formData: FormData): ValidationResult<D
 			notes: notes || null,
 			estimatedMinutes,
 			resetTimes: normalizedResetTimes,
-			timeZone
+			timeZone,
+			pushReminderEnabled,
+			pushReminderOffsetMinutes: pushReminderEnabled ? pushReminderOffsetMinutes : null
 		}
 	};
 }
