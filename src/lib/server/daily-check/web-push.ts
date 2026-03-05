@@ -71,8 +71,7 @@ function readLength(bytes: Uint8Array, offset: number): { length: number; bytesR
 	return { length, bytesRead: 1 + count };
 }
 
-function derToJose(derSignature: ArrayBuffer): Uint8Array {
-	const der = new Uint8Array(derSignature);
+function derToJose(der: Uint8Array): Uint8Array {
 	let offset = 0;
 
 	if (der[offset] !== 0x30) {
@@ -106,6 +105,17 @@ function derToJose(derSignature: ArrayBuffer): Uint8Array {
 	jose.set(r.slice(Math.max(0, r.length - 32)), Math.max(0, 32 - r.length));
 	jose.set(s.slice(Math.max(0, s.length - 32)), 32 + Math.max(0, 32 - s.length));
 	return jose;
+}
+
+function signatureToJose(signature: ArrayBuffer): Uint8Array {
+	const bytes = new Uint8Array(signature);
+
+	// WebCrypto implementations can return IEEE-P1363 raw (r||s, 64 bytes).
+	// Length=64 is unambiguously raw and should never be DER-parsed.
+	if (bytes.length === 64) {
+		return bytes;
+	}
+	return derToJose(bytes);
 }
 
 function parsePublicKeyCoordinates(vapidPublicKey: string): { x: string; y: string } {
@@ -160,7 +170,7 @@ async function createVapidJwt(endpoint: string, options: WebPushOptions): Promis
 		privateKey,
 		new TextEncoder().encode(signingInput)
 	);
-	const signature = toBase64Url(derToJose(signatureDer));
+	const signature = toBase64Url(signatureToJose(signatureDer));
 
 	return `${signingInput}.${signature}`;
 }
@@ -207,4 +217,18 @@ export async function sendWebPushNotification(
 
 export function isExpiredSubscriptionStatus(status: number): boolean {
 	return status === 404 || status === 410;
+}
+
+export function isInvalidSubscriptionResponse(status: number, errorMessage?: string): boolean {
+	if (isExpiredSubscriptionStatus(status)) return true;
+	if (!(status === 400 || status === 401 || status === 403)) return false;
+	if (!errorMessage) return false;
+
+	const normalized = errorMessage.toLowerCase();
+	return (
+		normalized.includes('do not correspond to the credentials') ||
+		normalized.includes('invalid registration') ||
+		normalized.includes('not a valid fcm registration token') ||
+		normalized.includes('unauthorizedregistration')
+	);
 }

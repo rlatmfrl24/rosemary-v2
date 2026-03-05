@@ -24,6 +24,23 @@ function toUint8Array(base64Url: string): Uint8Array {
 	return Uint8Array.from(raw, (char) => char.charCodeAt(0));
 }
 
+function uint8ArrayEquals(left: Uint8Array, right: Uint8Array): boolean {
+	if (left.length !== right.length) return false;
+	for (let index = 0; index < left.length; index += 1) {
+		if (left[index] !== right[index]) return false;
+	}
+	return true;
+}
+
+function subscriptionMatchesVapidKey(
+	subscription: PushSubscription,
+	expectedApplicationServerKey: Uint8Array
+): boolean {
+	const actualKey = subscription.options?.applicationServerKey;
+	if (!actualKey) return false;
+	return uint8ArrayEquals(new Uint8Array(actualKey), expectedApplicationServerKey);
+}
+
 function serializeSubscription(subscription: PushSubscription): SerializablePushSubscription | null {
 	const json = subscription.toJSON();
 	if (!json.endpoint || !json.keys?.p256dh || !json.keys?.auth) {
@@ -125,11 +142,18 @@ export async function subscribeToDailyCheckPush(vapidPublicKey: string): Promise
 	}
 
 	const registration = await ensureRegistration();
+	const expectedApplicationServerKey = toUint8Array(vapidPublicKey);
 	let subscription = await registration.pushManager.getSubscription();
+	if (subscription && !subscriptionMatchesVapidKey(subscription, expectedApplicationServerKey)) {
+		await removeServerSubscription(subscription.endpoint).catch(() => undefined);
+		await subscription.unsubscribe();
+		subscription = null;
+	}
+
 	if (!subscription) {
 		subscription = await registration.pushManager.subscribe({
 			userVisibleOnly: true,
-			applicationServerKey: toUint8Array(vapidPublicKey)
+			applicationServerKey: expectedApplicationServerKey
 		});
 	}
 
@@ -165,6 +189,12 @@ export async function syncDailyCheckPushSubscription(vapidPublicKey: string): Pr
 	const registration = await ensureRegistration();
 	const subscription = await registration.pushManager.getSubscription();
 	if (!subscription) return;
+	const expectedApplicationServerKey = toUint8Array(vapidPublicKey);
+	if (!subscriptionMatchesVapidKey(subscription, expectedApplicationServerKey)) {
+		await removeServerSubscription(subscription.endpoint).catch(() => undefined);
+		await subscription.unsubscribe();
+		return;
+	}
 
 	const serializable = serializeSubscription(subscription);
 	if (!serializable) return;

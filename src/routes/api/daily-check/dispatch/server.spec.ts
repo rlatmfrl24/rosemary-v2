@@ -25,7 +25,13 @@ vi.mock('$lib/server/daily-check/database', () => ({
 
 vi.mock('$lib/server/daily-check/web-push', () => ({
 	sendWebPushNotification: vi.fn(),
-	isExpiredSubscriptionStatus: (status: number) => status === 404 || status === 410
+	isExpiredSubscriptionStatus: (status: number) => status === 404 || status === 410,
+	isInvalidSubscriptionResponse: (status: number, errorMessage?: string) => {
+		if (status === 404 || status === 410) return true;
+		if (!(status === 400 || status === 401 || status === 403)) return false;
+		const normalized = (errorMessage ?? '').toLowerCase();
+		return normalized.includes('do not correspond to the credentials');
+	}
 }));
 
 function buildRequest(headers?: HeadersInit): Request {
@@ -189,5 +195,75 @@ describe('daily-check dispatch API', () => {
 		expect(markPushSubscriptionSuccesses).toHaveBeenCalledTimes(1);
 		expect(recordReminderDispatchLogs).toHaveBeenCalledWith(expect.anything(), candidates);
 		expect(markPushSubscriptionError).toHaveBeenCalledTimes(2);
+	});
+
+	it('removes subscription on vapid credential mismatch error', async () => {
+		const candidates = [
+			{
+				item: {
+					id: 1,
+					title: '출석',
+					kind: 'daily_quest',
+					importance: 'normal',
+					url: '',
+					notes: null,
+					estimatedMinutes: 10,
+					resetTimes: ['09:00'],
+					timeZone: 'Asia/Seoul',
+					pushReminderEnabled: true,
+					pushReminderOffsetMinutes: 15,
+					completionCycleKey: null,
+					completedAt: null,
+					createdAt: 0,
+					updatedAt: 0,
+					currentCycleKey: '2026-03-05#09:00',
+					activeResetTime: '09:00',
+					isCompleted: false,
+					cycleStartedAt: 0,
+					minutesPastReset: 0,
+					minutesUntilReset: 0,
+					nextResetAt: 0
+				},
+				cycleKey: '2026-03-05#09:00',
+				effectiveOffsetMinutes: 15,
+				dueAt: 0
+			}
+		];
+
+		vi.mocked(getReminderDispatchCandidates).mockResolvedValue(candidates);
+		vi.mocked(getPushSubscriptions).mockResolvedValue([
+			{
+				id: 2,
+				endpoint: 'https://fcm.googleapis.com/fcm/send/mismatch',
+				p256dh: 'A'.repeat(88),
+				auth: 'B'.repeat(16),
+				userAgent: null,
+				lastSuccessAt: null,
+				lastError: null,
+				createdAt: 0,
+				updatedAt: 0
+			}
+		]);
+		vi.mocked(sendWebPushNotification).mockResolvedValue({
+			ok: false,
+			status: 403,
+			error: 'the VAPID credentials in the authorization header do not correspond to the credentials used to create the subscriptions.'
+		});
+
+		const response = await POST({
+			platform: buildPlatform(),
+			request: buildRequest({ Authorization: 'Bearer secret-token' })
+		} as never);
+		const body = (await response.json()) as {
+			success: boolean;
+			invalidSubscriptions: number;
+		};
+
+		expect(response.status).toBe(200);
+		expect(body.success).toBe(true);
+		expect(body.invalidSubscriptions).toBe(1);
+		expect(removePushSubscriptionsByEndpoints).toHaveBeenCalledWith(expect.anything(), [
+			'https://fcm.googleapis.com/fcm/send/mismatch'
+		]);
 	});
 });

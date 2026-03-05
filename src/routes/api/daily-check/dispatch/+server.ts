@@ -10,6 +10,7 @@ import {
 import { ensureDailyCheckInfrastructure } from '$lib/server/daily-check/infrastructure';
 import {
 	isExpiredSubscriptionStatus,
+	isInvalidSubscriptionResponse,
 	sendWebPushNotification
 } from '$lib/server/daily-check/web-push';
 import { parseDefaultReminderOffsetMinutes } from '$lib/server/daily-check/reminder-dispatch';
@@ -154,7 +155,10 @@ export const POST: RequestHandler = async ({ platform, request }) => {
 		errors.push(`[${subscription.endpoint}] ${errorMessage}`);
 		await markPushSubscriptionError(db, subscription.endpoint, errorMessage);
 
-		if (isExpiredSubscriptionStatus(result.status)) {
+		if (
+			isExpiredSubscriptionStatus(result.status) ||
+			isInvalidSubscriptionResponse(result.status, errorMessage)
+		) {
 			invalidEndpoints.push(subscription.endpoint);
 		}
 	}
